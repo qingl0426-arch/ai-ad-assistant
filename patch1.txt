@@ -1,0 +1,6 @@
+﻿*** Begin Patch
+*** Update File: src/app/dashboard/page.tsx
+@@     }).catch(() => setLoading(false));
++    // eslint-disable-next-line react-hooks/exhaustive-deps
+     });
+*** End Patch
