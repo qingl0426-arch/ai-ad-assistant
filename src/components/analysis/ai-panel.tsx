@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Lightbulb, AlertTriangle, TrendingUp, BarChart3 } from "lucide-react";
+import { Sparkles, Lightbulb, Loader2, Brain, Cpu } from "lucide-react";
 import type { AISuggestionResult } from "@/lib/openai.service";
 
 interface AIPanelProps {
@@ -12,99 +12,102 @@ interface AIPanelProps {
 }
 
 export function AIPanel({ data, loading, onRefresh }: AIPanelProps) {
-  if (loading) {
-    return (
-      <Card className="border-primary/30">
-        <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" />AI 分析</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-            正在分析数据...
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <Card className="border-primary/30">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />AI 投流分析
-          </CardTitle>
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      className="relative rounded-2xl border border-indigo-500/[0.12] bg-gradient-to-br from-indigo-500/[0.03] via-purple-500/[0.02] to-pink-500/[0.01] backdrop-blur-xl p-5 sm:p-6 overflow-hidden"
+    >
+      {/* Ambient glow */}
+      <div className="absolute top-0 right-0 w-[200px] h-[200px] bg-indigo-500/[0.04] rounded-full blur-[80px] pointer-events-none" />
+
+      <div className="relative">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            {data && <span className="text-xs text-muted-foreground">置信度 {data.confidence}%</span>}
-            <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
-              <Sparkles className="h-3 w-3 mr-1" />重新分析
-            </Button>
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center">
+              <Brain className="h-4.5 w-4.5 text-indigo-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">AI 智能分析</h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                </span>
+                <span className="text-[10px] text-slate-500">GPT-4o 驱动</span>
+              </div>
+            </div>
           </div>
+          {onRefresh && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={loading}
+              className="rounded-lg border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/[0.08] hover:border-indigo-500/30 gap-1.5 h-8 text-xs"
+            >
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              分析
+            </Button>
+          )}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!data ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>点击"重新分析"获取 AI 投流建议</p>
-            <p className="text-xs mt-1">需要配置 OPENAI_API_KEY</p>
+
+        {/* Content */}
+        {loading ? (
+          <div className="space-y-3 animate-pulse">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                <div className="h-4 w-4 rounded bg-white/[0.08] mt-0.5 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-full bg-white/[0.05] rounded" />
+                  <div className="h-3 w-3/4 bg-white/[0.05] rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : data ? (
+          <div className="space-y-2.5">
+            {data.suggestions?.slice(0, 3).map((s, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.12 }}
+                className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] hover:border-white/[0.08] transition-all group"
+              >
+                <div className="h-7 w-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <Lightbulb className="h-3.5 w-3.5 text-amber-400" />
+                </div>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  {typeof s === "string" ? s : (s as { content?: string }).content || ""}
+                </p>
+              </motion.div>
+            )) || (
+              <div className="text-center py-10">
+                <div className="h-12 w-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-3">
+                  <Cpu className="h-6 w-6 text-slate-600" />
+                </div>
+                <p className="text-slate-500 text-sm">点击分析按钮获取 AI 建议</p>
+                <p className="text-slate-600 text-xs mt-1">基于实时数据生成智能推荐</p>
+              </div>
+            )}
           </div>
         ) : (
-          <>
-            <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
-              <p className="text-sm font-medium">{data.summary}</p>
+          <div className="text-center py-10">
+            <div className="h-12 w-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-3">
+              <Cpu className="h-6 w-6 text-slate-600" />
             </div>
-
-            <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="h-4 w-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-700 dark:text-blue-400">预算建议</span>
-              </div>
-              <p className="text-sm text-blue-600 dark:text-blue-400">{data.budgetAdvice}</p>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-2">
-                <div className="flex items-center gap-1 text-sm font-medium text-green-700 dark:text-green-400">
-                  <Lightbulb className="h-3 w-3" />投流建议
-                </div>
-                <ul className="space-y-1">
-                  {data.suggestions.map((s, i) => (
-                    <li key={i} className="text-xs text-muted-foreground flex gap-1">
-                      <span className="text-green-500 shrink-0">{i + 1}.</span>{s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-1 text-sm font-medium text-red-700 dark:text-red-400">
-                  <AlertTriangle className="h-3 w-3" />风险提示
-                </div>
-                <ul className="space-y-1">
-                  {data.risks.map((s, i) => (
-                    <li key={i} className="text-xs text-muted-foreground flex gap-1">
-                      <span className="text-red-500 shrink-0">{i + 1}.</span>{s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-1 text-sm font-medium text-purple-700 dark:text-purple-400">
-                  <TrendingUp className="h-3 w-3" />优化建议
-                </div>
-                <ul className="space-y-1">
-                  {data.optimizations.map((s, i) => (
-                    <li key={i} className="text-xs text-muted-foreground flex gap-1">
-                      <span className="text-purple-500 shrink-0">{i + 1}.</span>{s}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </>
+            <p className="text-slate-500 text-sm">点击分析按钮获取 AI 建议</p>
+            <p className="text-slate-600 text-xs mt-1">基于实时数据生成智能推荐</p>
+          </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </motion.div>
   );
 }

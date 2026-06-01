@@ -1,118 +1,97 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { BarChart3, CheckCircle } from "lucide-react";
+import { Sparkles, Lock, Loader2, CheckCircle2 } from "lucide-react";
+import { motion } from "framer-motion";
+import Link from "next/link";
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [done, setDone] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-
-    if (password.length < 6) {
-      setError("密码至少6个字符");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("两次输入的密码不一致");
-      return;
-    }
-
     setLoading(true);
-
-    const { error: updateError } = await supabase.auth.updateUser({
-      password,
-    });
-
-    if (updateError) {
-      setError(updateError.message);
-      setLoading(false);
-      return;
-    }
-
-    setSuccess(true);
-    setLoading(false);
-    setTimeout(() => router.push("/dashboard"), 2000);
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
-        <Card className="w-full max-w-sm">
-          <CardContent className="p-8 text-center space-y-4">
-            <CheckCircle className="h-12 w-12 mx-auto text-green-500" />
-            <div>
-              <p className="font-medium text-lg">密码重置成功</p>
-              <p className="text-sm text-muted-foreground mt-1">正在跳转到数据大屏...</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    setError("");
+    const { error: err } = await supabase.auth.updateUser({ password });
+    if (err) { setError(err.message); setLoading(false); }
+    else { setDone(true); setTimeout(() => router.push("/dashboard"), 1500); }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center space-y-1">
-          <div className="flex justify-center mb-2">
-            <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
-              <BarChart3 className="h-5 w-5 text-primary-foreground" />
-            </div>
+    <div className="min-h-screen bg-[#09090b] flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md"
+      >
+        <Link href="/" className="flex items-center justify-center gap-2.5 mb-10">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/25 flex items-center justify-center">
+            <Sparkles className="h-5 w-5 text-white" />
           </div>
-          <CardTitle className="text-xl">设置新密码</CardTitle>
-          <CardDescription>请输入你的新密码</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {error && (
-              <div className="p-2 text-sm rounded bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400">
-                {error}
+          <span className="text-xl font-bold text-white">直播投流AI</span>
+        </Link>
+
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-2xl p-8 shadow-2xl shadow-black/20">
+          {done ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-6"
+            >
+              <CheckCircle2 className="h-14 w-14 mx-auto text-emerald-400 mb-4" />
+              <h2 className="text-lg font-bold text-white mb-2">密码已重置</h2>
+              <p className="text-sm text-slate-400">即将跳转到数据大屏...</p>
+            </motion.div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">设置新密码</h2>
+                <p className="text-sm text-slate-400">请输入新的登录密码</p>
               </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="password">新密码</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="至少6个字符"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">确认新密码</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="再次输入密码"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "重置中..." : "重置密码"}
-            </Button>
-          </CardContent>
-        </form>
-      </Card>
+
+              <div className="space-y-2">
+                <Label className="text-slate-400 text-xs font-medium">新密码</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="至少 6 位字符"
+                    required
+                    minLength={6}
+                    className="pl-10 h-11"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-sm p-3.5 rounded-xl bg-red-500/[0.08] text-red-400 border border-red-500/[0.15]">
+                  {error}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white h-12 font-semibold shadow-lg shadow-indigo-500/20 gap-2"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "重置密码"}
+              </Button>
+            </form>
+          )}
+        </div>
+      </motion.div>
     </div>
   );
 }

@@ -1,10 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Upload, FileText, CheckCircle, AlertCircle, X } from "lucide-react";
+import { Upload, FileText, CheckCircle, AlertCircle, X, CloudUpload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 import type { UploadResult } from "@/types/database";
 
 interface UploadFormProps {
@@ -25,7 +26,7 @@ export function UploadForm({ onSuccess }: UploadFormProps) {
     if (f && f.name.endsWith(".csv")) {
       setFile(f);
     } else if (f) {
-      setError("仅支持 CSV 文件");
+      setError("仅支持 CSV 文件格式");
     }
   }, []);
 
@@ -44,16 +45,10 @@ export function UploadForm({ onSuccess }: UploadFormProps) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-
       const res = await fetch("/api/upload", { method: "POST", body: formData });
-        if (res.status === 401) { window.location.href = "/login"; return; }
+      if (res.status === 401) { window.location.href = "/login"; return; }
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "上传失败");
-        return;
-      }
-
+      if (!res.ok) { setError(data.error || "上传失败"); return; }
       setResult(data);
       onSuccess?.(data);
     } catch {
@@ -71,13 +66,17 @@ export function UploadForm({ onSuccess }: UploadFormProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Drop zone */}
-      <div
+      <motion.div
+        whileTap={{ scale: 0.995 }}
         className={cn(
-          "relative rounded-xl border-2 border-dashed p-8 text-center transition-colors cursor-pointer",
-          dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50",
-          file && "border-green-500 bg-green-50 dark:bg-green-950/20",
+          "relative rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-200 cursor-pointer",
+          dragOver
+            ? "border-indigo-400/50 bg-indigo-500/[0.06]"
+            : file
+            ? "border-emerald-500/30 bg-emerald-500/[0.03]"
+            : "border-white/[0.08] hover:border-white/[0.14] bg-white/[0.01]"
         )}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
@@ -92,94 +91,129 @@ export function UploadForm({ onSuccess }: UploadFormProps) {
           onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
         />
 
-        {file ? (
-          <div className="flex items-center justify-center gap-4">
-            <FileText className="h-10 w-10 text-green-500" />
-            <div className="text-left">
-              <p className="font-medium">{file.name}</p>
-              <p className="text-sm text-muted-foreground">
-                {(file.size / 1024).toFixed(1)} KB
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="ml-4 shrink-0"
-              onClick={(e) => { e.stopPropagation(); clearFile(); }}
+        <AnimatePresence mode="wait">
+          {file ? (
+            <motion.div
+              key="file"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="flex items-center justify-center gap-5"
             >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <Upload className="h-10 w-10 mx-auto text-muted-foreground" />
-            <div>
-              <p className="font-medium">拖拽 CSV 文件到此处</p>
-              <p className="text-sm text-muted-foreground mt-1">或点击选择文件</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      {file && !result && (
-        <Button
-          className="w-full"
-          onClick={handleUpload}
-          disabled={uploading}
-        >
-          {uploading ? "上传中..." : `上传 ${file.name}`}
-        </Button>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {/* Result */}
-      {result && (
-        <Card className="border-green-200 dark:border-green-900">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-              <CheckCircle className="h-5 w-5" />
-              <span className="font-medium">上传完成</span>
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">总行数</p>
-                <p className="font-medium">{result.totalRows}</p>
+              <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                <FileText className="h-7 w-7 text-emerald-400" />
               </div>
-              <div>
-                <p className="text-muted-foreground">成功</p>
-                <p className="font-medium text-green-600">{result.successCount}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">失败</p>
-                <p className={cn("font-medium", result.errorCount > 0 ? "text-red-500" : "")}>
-                  {result.errorCount}
+              <div className="text-left">
+                <p className="font-semibold text-white text-lg">{file.name}</p>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  {(file.size / 1024).toFixed(1)} KB
                 </p>
               </div>
-            </div>
-            {result.errors.length > 0 && (
-              <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
-                {result.errors.map((e, i) => (
-                  <p key={i} className="text-xs text-red-500">
-                    第 {e.row} 行: {e.message}
-                  </p>
-                ))}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-4 shrink-0 rounded-xl hover:bg-white/[0.06]"
+                onClick={(e) => { e.stopPropagation(); clearFile(); }}
+              >
+                <X className="h-5 w-5 text-slate-400" />
+              </Button>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="drop"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="space-y-4"
+            >
+              <div className="h-16 w-16 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto">
+                <CloudUpload className="h-8 w-8 text-slate-500" />
               </div>
-            )}
-            <Button variant="outline" size="sm" className="mt-2" onClick={clearFile}>
-              继续上传
+              <div>
+                <p className="font-semibold text-white text-base">拖拽 CSV 文件到此处</p>
+                <p className="text-sm text-slate-500 mt-1.5">或点击选择文件 · 仅支持 .csv 格式</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+
+      {/* Upload button */}
+      <AnimatePresence>
+        {file && !result && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+          >
+            <Button
+              className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 h-12 text-base font-semibold shadow-lg shadow-indigo-500/20 gap-2"
+              onClick={handleUpload}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
+                  上传中...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" /> 上传 {file.name}
+                </>
+              )}
             </Button>
-          </CardContent>
-        </Card>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Error */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="flex items-center gap-3 p-4 rounded-xl bg-red-500/[0.08] text-red-400 border border-red-500/[0.15] text-sm"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Result */}
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+          >
+            <Card className="border-emerald-500/20 bg-emerald-500/[0.03]">
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center gap-2.5 text-emerald-400">
+                  <CheckCircle className="h-5 w-5" />
+                  <span className="font-semibold text-sm">上传完成</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-slate-500 text-xs mb-0.5">总行数</p>
+                    <p className="font-semibold text-white">{result.totalRows}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-xs mb-0.5">成功</p>
+                    <p className="font-semibold text-emerald-400">{result.successCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-xs mb-0.5">跳过</p>
+                    <p className="font-semibold text-amber-400">{result.errorCount}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
-

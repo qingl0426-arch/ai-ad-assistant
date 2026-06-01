@@ -2,6 +2,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getAlipay, generateOutTradeNo } from "@/lib/alipay/server";
 import { PLANS, type PlanTier } from "@/lib/alipay/config";
+import { logPaymentEvent } from "@/lib/alipay/logger";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -19,6 +20,11 @@ export async function POST(request: NextRequest) {
     await (supabase.from("user_profiles") as any).upsert({
       id: user.id, plan: "free", plan_updated_at: new Date().toISOString(),
     });
+
+    await logPaymentEvent({
+      event: "payment_success", user_id: user.id, plan: "free", amount: 0,
+    });
+
     return NextResponse.json({ success: true, plan: "free" });
   }
 
@@ -27,11 +33,18 @@ export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin") || "http://localhost:3002";
 
   await (supabase.from("alipay_orders") as any).insert({
-    out_trade_no: outTradeNo, user_id: user.id, plan, amount: planConfig.price, status: "pending",
+    out_trade_no: outTradeNo, user_id: user.id, plan,
+    amount: planConfig.price, status: "pending",
+  });
+
+  await logPaymentEvent({
+    event: "checkout_create", out_trade_no: outTradeNo,
+    user_id: user.id, plan, amount: planConfig.price, payload: { payType },
   });
 
   const baseParams = {
-    out_trade_no: outTradeNo, total_amount: planConfig.priceYuan,
+    out_trade_no: outTradeNo,
+    total_amount: planConfig.priceYuan,
     subject: `AI Ad Assistant - ${planConfig.name}`,
     body: `订阅${planConfig.name}套餐`,
   };
@@ -66,7 +79,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ qrCode: result.qrCode || result.qr_code, outTradeNo });
   } catch (err: any) {
+    const message = err?.message || "支付宝接口调用失败";
     console.error("Alipay error:", err);
-    return NextResponse.json({ error: err.message || "支付宝接口调用失败" }, { status: 500 });
+
+    await logPaymentEvent({
+      event: "checkout_error", out_trade_no: outTradeNo,
+      user_id: user.id, plan, amount: planConfig.price, error: message,
+    });
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

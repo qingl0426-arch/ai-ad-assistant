@@ -1,6 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAlipay } from "@/lib/alipay/server";
+import { logPaymentEvent } from "@/lib/alipay/logger";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -16,7 +17,9 @@ export async function GET(request: NextRequest) {
     .select("*").eq("out_trade_no", outTradeNo).eq("user_id", user.id).limit(1);
 
   const order = orders?.[0];
-  if (order?.status === "paid") return NextResponse.json({ status: "paid", plan: order.plan });
+  if (order?.status === "paid") {
+    return NextResponse.json({ status: "paid", plan: order.plan });
+  }
 
   try {
     const alipay = getAlipay();
@@ -32,10 +35,24 @@ export async function GET(request: NextRequest) {
       await (supabase.from("user_profiles") as any).upsert({
         id: user.id, plan: order?.plan || "pro", plan_updated_at: new Date().toISOString(),
       });
+
+      await logPaymentEvent({
+        event: "order_sync", out_trade_no: outTradeNo,
+        user_id: user.id, plan: order?.plan, amount: order?.amount,
+        result: "synced from alipay query",
+      });
+
       return NextResponse.json({ status: "paid", plan: order?.plan });
     }
+
+    await logPaymentEvent({
+      event: "order_query", out_trade_no: outTradeNo, user_id: user.id,
+      result: `status from alipay: ${result.tradeStatus}`,
+    });
+
     return NextResponse.json({ status: order?.status || "pending" });
-  } catch {
-    return NextResponse.json({ status: order?.status || "pending" });
+  } catch (err: any) {
+    console.error("Alipay query error:", err);
+    return NextResponse.json({ status: order?.status || "pending", error: err?.message });
   }
 }
