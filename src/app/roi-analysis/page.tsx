@@ -85,22 +85,6 @@ function GradeBadge({ grade }: { grade: string }) {
   );
 }
 
-function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
-  const radius = (size - 8) / 2;
-  const circ = 2 * Math.PI * radius;
-  const pct = Math.min(score / 100, 1);
-  const color = score >= 80 ? "#34d399" : score >= 50 ? "#f59e0b" : "#ef4444";
-  return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-        <motion.circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={circ} initial={{ strokeDashoffset: circ }} animate={{ strokeDashoffset: circ * (1 - pct) }} transition={{ duration: 1.5, ease: "easeOut", delay: 0.5 }} />
-      </svg>
-      <span className="absolute text-lg font-bold text-white">{score}</span>
-    </div>
-  );
-}
-
 /* ═══════════════════════════════════ MAIN ═══════════════════════════════════ */
 export default function ROIAnalysisPage() {
   const [user, setUser] = useState<{ email?: string } | null>(null);
@@ -179,32 +163,7 @@ export default function ROIAnalysisPage() {
               <KPICard label="总订单" value={totals?.orders?.toLocaleString() || "0"} sub={totals?.gmv && totals?.orders ? `客单 ¥${Math.round(totals.gmv / totals.orders).toLocaleString()}` : undefined} delay={0.2} />
             </div>
 
-            {/* Score + Summary */}
-            {overall && (
-              <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="grid md:grid-cols-3 gap-6">
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-xl p-6 flex flex-col items-center justify-center">
-                  <ScoreRing score={overall.overallROI > 4 ? 92 : overall.overallROI > 2 ? 68 : 35} size={100} />
-                  <p className="text-xs text-slate-500 mt-3">综合评分</p>
-                </div>
-                <div className="md:col-span-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-xl p-6">
-                  <h3 className="text-sm font-semibold text-white mb-3">智能诊断</h3>
-                  <p className="text-slate-300 text-sm leading-relaxed mb-4">{overall.suggestion}</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                    {[
-                      { label: "平均 CTR", value: `${(overall.avgCTR * 100).toFixed(2)}%` },
-                      { label: "转化率", value: `${(overall.avgConversionRate * 100).toFixed(2)}%` },
-                      { label: "总天数", value: `${daily.length} 天` },
-                      { label: "平台数", value: `${platforms.length} 个` },
-                    ].map(m => (
-                      <div key={m.label} className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                        <p className="text-[10px] text-slate-500 mb-1">{m.label}</p>
-                        <p className="text-sm font-bold text-white">{m.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
+
 
             {/* Charts row */}
             <div className="grid lg:grid-cols-2 gap-6">
