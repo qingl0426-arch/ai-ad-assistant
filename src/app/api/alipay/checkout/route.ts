@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   const planConfig = PLANS[plan];
   const outTradeNo = generateOutTradeNo();
-  const origin = request.headers.get("origin") || "http://localhost:3002";
+  const origin = request.headers.get("origin") || process.env.NEXT_PUBLIC_SITE_URL || "https://wqaihub.cn";
 
   await (supabase.from("alipay_orders") as any).insert({
     out_trade_no: outTradeNo, user_id: user.id, plan,
