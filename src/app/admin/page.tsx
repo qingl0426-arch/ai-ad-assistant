@@ -1,4 +1,5 @@
-﻿"use client";
+﻿/* eslint-disable @typescript-eslint/no-unused-vars */
+"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -166,11 +167,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-[#09090b]">
-      <Navbar
-        user={user}
-        showAuth={false}
-        onLogout={async () => { await supabase.auth.signOut(); router.push("/login"); }}
-      />
+      <Navbar />
       <main className="mx-auto max-w-7xl px-4 sm:px-6 pt-24 pb-16">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">

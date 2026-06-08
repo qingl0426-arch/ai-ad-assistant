@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -228,7 +228,7 @@ export default function AccountPage() {
 
   return (
     <div className="min-h-screen bg-[#09090b]">
-      <Navbar showAuth={false} />
+      <Navbar />
       <main className="mx-auto max-w-6xl px-4 sm:px-6 pt-24 pb-16">
         <div className="flex flex-col lg:flex-row gap-8">
           <aside className="lg:w-56 shrink-0">
