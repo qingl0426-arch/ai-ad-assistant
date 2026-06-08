@@ -28,9 +28,18 @@ export interface Database {
         Insert: Omit<PaymentLog, "id" | "created_at">;
         Update: Partial<Omit<PaymentLog, "id" | "created_at">>;
       };
+      product_trends: {
+        Row: ProductTrendRow;
+        Insert: ProductTrendInsert;
+        Update: Partial<ProductTrendInsert>;
+      };
     };
   };
 }
+
+/* ================================================================
+   ad_traffic
+   ================================================================ */
 
 export interface AdTrafficRow {
   id: string;
@@ -62,6 +71,10 @@ export interface AdTrafficInsert {
   batch_id?: string;
 }
 
+/* ================================================================
+   upload_batches
+   ================================================================ */
+
 export interface UploadBatch {
   id: string;
   user_id: string;
@@ -72,6 +85,10 @@ export interface UploadBatch {
   created_at: string;
 }
 
+/* ================================================================
+   user_profiles
+   ================================================================ */
+
 export interface UserProfile {
   id: string;
   display_name: string | null;
@@ -80,6 +97,10 @@ export interface UserProfile {
   created_at: string;
   updated_at: string;
 }
+
+/* ================================================================
+   alipay_orders
+   ================================================================ */
 
 export type AlipayOrderStatus = "pending" | "paid" | "refunding" | "refunded" | "closed";
 
@@ -98,6 +119,10 @@ export interface AlipayOrder {
   refunded_at: string | null;
   created_at: string;
 }
+
+/* ================================================================
+   payment_logs
+   ================================================================ */
 
 export type PaymentEventType =
   | "checkout_create"
@@ -123,6 +148,58 @@ export interface PaymentLog {
   error: string | null;
   created_at: string;
 }
+
+/* ================================================================
+   product_trends
+   ================================================================ */
+
+export type CompetitionLevel = "低" | "中" | "高";
+export type TrendStatus = "爆发" | "上升" | "稳定" | "下降";
+
+export interface ProductTrendRow {
+  id: string;
+  user_id: string;
+  platform: string;
+  product_name: string;
+  category: string;
+  price: number;
+  sales_7d: number;
+  gmv_7d: number;
+  sales_growth_rate: number;
+  gmv_growth_rate: number;
+  comment_growth_rate: number;
+  favorite_growth_rate: number;
+  profit_margin_estimate: number;
+  competition_level: CompetitionLevel;
+  hot_score: number;
+  trend_status: TrendStatus;
+  source: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductTrendInsert {
+  user_id?: string;
+  platform?: string;
+  product_name: string;
+  category?: string;
+  price?: number;
+  sales_7d?: number;
+  gmv_7d?: number;
+  sales_growth_rate?: number;
+  gmv_growth_rate?: number;
+  comment_growth_rate?: number;
+  favorite_growth_rate?: number;
+  profit_margin_estimate?: number;
+  competition_level?: CompetitionLevel;
+  hot_score?: number;
+  trend_status?: TrendStatus;
+  source?: string;
+}
+
+/* ================================================================
+   通用类型
+   ================================================================ */
 
 export interface CSVParsedRow {
   date: string;

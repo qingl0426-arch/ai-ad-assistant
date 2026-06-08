@@ -9,7 +9,7 @@ import {
   Sparkles, Menu, X, ChevronDown, ArrowRight,
   Zap, Crown, HelpCircle, BookOpen, MessageCircle,
   BarChart3, Upload, User, LogOut, Shield,
-  Bot, FileText, TrendingUp,
+  Bot, FileText, TrendingUp, ShoppingBag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -26,6 +26,8 @@ const NAV_LINKS = [
     href: "/",
     children: [
       { label: "智能投流", desc: "AI 驱动的投流决策", icon: Zap, href: "/" },
+      { label: "AI利润增长", desc: "该停什么、该加什么、预计多赚多少", icon: TrendingUp, href: "/profit-growth" },
+      { label: "爆品雷达", desc: "发现高增长商品，预测未来爆品机会", icon: ShoppingBag, href: "/product-radar" },
       { label: "数据大屏", desc: "实时数据可视化看板", icon: BarChart3, href: "/dashboard" },
       { label: "AI投流总监", desc: "全维度智能投放分析", icon: Sparkles, href: "/ai-director" },
       { label: "AI运营助手", desc: "智能对话投流顾问", icon: Bot, href: "/ai-assistant" },
