@@ -5,9 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Menu, Search, Bell, Settings } from "lucide-react";
 
-interface TopbarProps {
-  onMenuClick: () => void;
-}
+interface TopbarProps { onMenuClick: () => void; }
 
 export function Topbar({ onMenuClick }: TopbarProps) {
   const router = useRouter();
@@ -16,8 +14,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
   useEffect(() => {
     import("@/lib/supabase/client").then(({ createClient }) => {
-      const supabase = createClient();
-      supabase.auth.getUser().then(({ data }) => {
+      createClient().auth.getUser().then(({ data }) => {
         if (data.user) setUser({ email: data.user.email });
       });
     });
@@ -25,60 +22,41 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchValue.trim()) {
-      router.push(`/ai-assistant?q=${encodeURIComponent(searchValue.trim())}`);
-    }
+    if (searchValue.trim()) router.push(`/ai-assistant?q=${encodeURIComponent(searchValue.trim())}`);
   };
 
-  const avatarLetter = (user?.email || "U").charAt(0).toUpperCase();
-
   return (
-    <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 md:px-6 shrink-0">
-      {/* Left: menu toggle */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onMenuClick}
-          className="lg:hidden p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-        >
+    <header className="h-[56px] bg-white border-b border-[#e5eaf0] flex items-center justify-between px-4 md:px-6 shrink-0">
+      <div className="flex items-center gap-4 flex-1">
+        <button onClick={onMenuClick} className="lg:hidden p-2 rounded-lg text-[#94a3b8] hover:text-[#475569] hover:bg-[#f8fafc] transition-colors">
           <Menu className="h-5 w-5" />
         </button>
-
-        {/* Search */}
-        <form onSubmit={handleSearch} className="hidden sm:flex items-center flex-1 max-w-md">
+        <form onSubmit={handleSearch} className="hidden sm:flex items-center max-w-[400px] flex-1">
           <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="搜索任务、商品、信号、关键词..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#1a1a2e] placeholder-gray-400 focus:outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50 focus:bg-white transition-all"
-            />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-[#94a3b8]" />
+            <input type="text" value={searchValue} onChange={(e) => setSearchValue(e.target.value)}
+              placeholder="搜索任务、商品、关键词、货源..."
+              className="w-full pl-10 pr-4 h-[38px] rounded-[12px] border border-[#e2e8f0] bg-[#f8fafc] text-[13px] text-[#0f172a] placeholder-[#94a3b8] focus:outline-none focus:border-[#1688ff] focus:ring-2 focus:ring-[#eaf4ff] focus:bg-white transition-all" />
           </div>
         </form>
       </div>
 
-      {/* Right actions */}
-      <div className="flex items-center gap-1.5">
-        <button className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors relative">
-          <Bell className="h-4.5 w-4.5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-orange-500 ring-2 ring-white" />
+      <div className="flex items-center gap-0.5 shrink-0">
+        <button className="p-2 rounded-[10px] text-[#94a3b8] hover:text-[#475569] hover:bg-[#f8fafc] transition-colors relative">
+          <Bell className="h-[18px] w-[18px]" />
+          <span className="absolute top-1.5 right-1.5 h-[8px] w-[8px] rounded-full bg-[#ff7a00] ring-2 ring-white" />
         </button>
-        <button className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
-          <Settings className="h-4.5 w-4.5" />
+        <button className="p-2 rounded-[10px] text-[#94a3b8] hover:text-[#475569] hover:bg-[#f8fafc] transition-colors">
+          <Settings className="h-[18px] w-[18px]" />
         </button>
-
         {user ? (
-          <Link href="/account" className="flex items-center gap-2 ml-2 pl-2 border-l border-gray-100">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-sky-400 flex items-center justify-center text-xs font-bold text-white shadow-sm">
-              {avatarLetter}
+          <Link href="/account" className="flex items-center gap-2 ml-1.5 pl-2.5 border-l border-[#e5eaf0]">
+            <div className="h-[34px] w-[34px] rounded-full bg-gradient-to-br from-[#1688ff] to-[#1d9bf0] flex items-center justify-center text-xs font-bold text-white shadow-sm">
+              {(user.email || "U").charAt(0).toUpperCase()}
             </div>
           </Link>
         ) : (
-          <Link
-            href="/login"
-            className="ml-2 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors shadow-sm"
-          >
+          <Link href="/login" className="ml-1.5 px-4 py-1.5 rounded-[10px] bg-[#1688ff] hover:bg-[#1670d9] text-white text-[13px] font-medium transition-colors shadow-sm">
             登录
           </Link>
         )}
