@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -30,7 +30,7 @@ const menuGroups: MenuGroup[] = [
       { label: "爆款榜单", href: "/product-radar", icon: Flame },
       { label: "利润测算", href: "/profit-growth", icon: Calculator },
       { label: "竞品分析", href: "/roi-analysis", icon: Eye },
-      { label: "指标总览", href: "/dashboard", icon: BarChart3 },
+      { label: "指标总览", href: "/metrics-overview", icon: BarChart3 },
       { label: "分析诊断", href: "/analysis-diagnosis", icon: AlertCircle },
     ],
   },
@@ -63,7 +63,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
   const isActive = (href: string) => {
     // Exact match or startsWith for nested routes
     if (href === "/ai-assistant") return pathname.startsWith("/ai-assistant");
-    if (href === "/dashboard") return pathname.startsWith("/dashboard");
+    if (href === "/metrics-overview") return pathname.startsWith("/metrics-overview");
     if (href === "/") return pathname === "/";
     return pathname === href || pathname.startsWith(href + "/");
   };
