@@ -18,10 +18,10 @@ const menuGroups: MenuGroup[] = [
     label: "智能选品",
     items: [
       { label: "AI智能选品", href: "/ai-assistant", icon: Sparkles },
-      { label: "选品计划", href: "/ai-assistant?tab=plan", icon: Target },
-      { label: "选品库", href: "/ai-assistant?tab=library", icon: FolderOpen },
-      { label: "历史查询", href: "/ai-assistant?tab=history", icon: History },
-      { label: "AI找货源", href: "/ai-assistant?tab=source", icon: Search },
+      { label: "选品计划", href: "/selection-plan", icon: Target },
+      { label: "选品库", href: "/selection-library", icon: FolderOpen },
+      { label: "历史查询", href: "/selection-history", icon: History },
+      { label: "AI找货源", href: "/ai-sourcing", icon: Search },
     ],
   },
   {
@@ -31,7 +31,7 @@ const menuGroups: MenuGroup[] = [
       { label: "利润测算", href: "/profit-growth", icon: Calculator },
       { label: "竞品分析", href: "/roi-analysis", icon: Eye },
       { label: "指标总览", href: "/dashboard", icon: BarChart3 },
-      { label: "分析诊断", href: "/ai-director", icon: AlertCircle },
+      { label: "分析诊断", href: "/analysis-diagnosis", icon: AlertCircle },
     ],
   },
   {
@@ -49,6 +49,9 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
   const pathname = usePathname();
   const [user, setUser] = useState<{ email?: string } | null>(null);
 
+  // Close mobile menu on route change
+  useEffect(() => { onMobileClose(); }, [pathname]); // eslint-disable-line
+
   useEffect(() => {
     import("@/lib/supabase/client").then(({ createClient }) => {
       createClient().auth.getUser().then(({ data }) => {
@@ -58,10 +61,11 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
   }, []);
 
   const isActive = (href: string) => {
-    const base = href.split("?")[0] || "";
-    if (base === "/ai-assistant") return pathname.startsWith("/ai-assistant");
-    if (base === "/") return pathname === "/";
-    return pathname.startsWith(base);
+    // Exact match or startsWith for nested routes
+    if (href === "/ai-assistant") return pathname.startsWith("/ai-assistant");
+    if (href === "/dashboard") return pathname.startsWith("/dashboard");
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname.startsWith(href + "/");
   };
 
   const sidebarContent = (
@@ -107,7 +111,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                   <Link
                     key={item.label}
                     href={item.href}
-                    onClick={onMobileClose}
+                    prefetch={true}
                     className={`relative flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[13px] font-medium transition-all duration-150 ${
                       collapsed ? "justify-center px-2" : ""
                     } ${
@@ -149,19 +153,27 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 
   return (
     <>
+      {/* Desktop */}
       <aside className={`hidden lg:flex flex-col fixed top-0 left-0 bottom-0 z-40 border-r border-[#e5eaf0] transition-all duration-300 ${
         collapsed ? "w-[64px]" : "w-[248px]"
       }`}>
         {sidebarContent}
       </aside>
+
+      {/* Mobile */}
       <AnimatePresence>
         {mobileOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={onMobileClose} />
-            <motion.aside initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/30 z-40 lg:hidden"
+              onClick={onMobileClose}
+            />
+            <motion.aside
+              initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed top-0 left-0 bottom-0 z-50 w-[280px] border-r border-[#e5eaf0] lg:hidden bg-white">
+              className="fixed top-0 left-0 bottom-0 z-50 w-[280px] border-r border-[#e5eaf0] lg:hidden bg-white"
+            >
               {sidebarContent}
             </motion.aside>
           </>
