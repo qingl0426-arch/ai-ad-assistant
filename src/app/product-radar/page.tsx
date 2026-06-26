@@ -1,184 +1,391 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { WorkspaceLayout } from "@/components/layout/workspace-layout";
 import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
+import Link from "next/link";
 import {
-  TrendingUp, Zap, AlertTriangle, Package, Upload, Sparkles, Crown,
-  ArrowUp, ArrowDown, Minus, Flame, DollarSign, Shield, Search, Loader2, RefreshCw, Brain, ChevronRight, Calendar
+  Flame, TrendingUp, DollarSign, Sparkles,
+  ShoppingBag, Filter, ChevronRight, Star,
+  Package,
+  Target, BarChart3, Zap, Search, Download,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { ProductTrendRow } from "@/types/database";
-import type { AIProductAnalysisResult } from "@/lib/ai-product-selector";
-import type { ForecastResult } from "@/lib/product-forecast";
-import { PLAN_LIMITS, getPlanLabel, type PlanTier } from "@/lib/permissions";
 
-/* ================================================================
-   工具函数
-   ================================================================ */
+/* ===== MOCK DATA — 后续可替换为 Supabase/API ===== */
+const MOCK_PRODUCTS = [
+  { rank: 1, name: "夏季冰丝防晒衣UPF50+", platform: "1688", category: "服饰", price: "¥39.9", sales: "12.8万", profit: "¥16.5", profitRate: "41%", heat: 98, competition: "中", aiSuggestion: "可跟进", inPlan: false },
+  { rank: 2, name: "无线蓝牙耳机降噪版", platform: "京东", category: "数码", price: "¥59.9", sales: "8.2万", profit: "¥22.3", profitRate: "37%", heat: 95, competition: "高", aiSuggestion: "适合投流", inPlan: false },
+  { rank: 3, name: "儿童防晒帽UPF50+", platform: "淘宝", category: "母婴", price: "¥29.9", sales: "6.5万", profit: "¥12.8", profitRate: "42%", heat: 91, competition: "中", aiSuggestion: "宝妈人群", inPlan: false },
+  { rank: 4, name: "厨房沥水置物架双层", platform: "1688", category: "家居", price: "¥49.9", sales: "5.1万", profit: "¥18.6", profitRate: "37%", heat: 89, competition: "低", aiSuggestion: "短视频", inPlan: false },
+  { rank: 5, name: "低脂鸡胸肉零食10包装", platform: "天猫", category: "食品", price: "¥29.8", sales: "4.7万", profit: "¥9.5", profitRate: "31%", heat: 86, competition: "中", aiSuggestion: "谨慎观察", inPlan: false },
+  { rank: 6, name: "大容量运动水壶2L", platform: "1688", category: "户外", price: "¥49", sales: "4.8万", profit: "¥18.6", profitRate: "38%", heat: 88, competition: "低", aiSuggestion: "直播带货", inPlan: false },
+  { rank: 7, name: "磁吸充电宝10000mAh", platform: "京东", category: "数码", price: "¥79", sales: "2.8万", profit: "¥28.4", profitRate: "36%", heat: 78, competition: "高", aiSuggestion: "需差异化", inPlan: false },
+  { rank: 8, name: "儿童水杯吸管杯", platform: "淘宝", category: "母婴", price: "¥25.9", sales: "3.2万", profit: "¥10.2", profitRate: "39%", heat: 83, competition: "中", aiSuggestion: "可测试", inPlan: false },
+];
 
-function getTrendColor(t: string) { switch (t) { case "爆发": return "text-rose-400 bg-rose-500/10 border-rose-500/20"; case "上升": return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"; case "稳定": return "text-slate-400 bg-slate-500/10 border-slate-500/20"; case "下降": return "text-red-400 bg-red-500/10 border-red-500/20"; default: return "text-slate-400 bg-slate-500/10 border-slate-500/20"; } }
-function getTrendIcon(t: string) { switch (t) { case "爆发": return <Flame className="h-3.5 w-3.5" />; case "上升": return <ArrowUp className="h-3.5 w-3.5" />; case "稳定": return <Minus className="h-3.5 w-3.5" />; case "下降": return <ArrowDown className="h-3.5 w-3.5" />; default: return <Minus className="h-3.5 w-3.5" />; } }
-function getCompColor(c: string) { switch (c) { case "低": return "text-emerald-400 bg-emerald-500/10"; case "中": return "text-amber-400 bg-amber-500/10"; case "高": return "text-red-400 bg-red-500/10"; default: return "text-slate-400 bg-slate-500/10"; } }
-function getScoreBar(s: number) { if (s >= 90) return "bg-rose-500"; if (s >= 80) return "bg-amber-500"; if (s >= 60) return "bg-indigo-500"; return "bg-slate-500"; }
-function getActionCol(a: string) { switch (a) { case "立即跟进": return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"; case "小批量测试": return "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"; case "暂时观察": return "bg-amber-500/10 text-amber-400 border-amber-500/20"; case "不建议跟品": return "bg-red-500/10 text-red-400 border-red-500/20"; default: return "bg-slate-500/10 text-slate-400 border-slate-500/20"; } }
-function getRiskCol(r: string) { switch (r) { case "低": return "text-emerald-400"; case "中": return "text-amber-400"; case "高": return "text-red-400"; default: return "text-slate-400"; } }
-function getLvl(s: number) { if (s >= 90) return { l: "爆款潜力极高", c: "bg-rose-500/10 text-rose-400 border-rose-500/20" }; if (s >= 80) return { l: "高潜力", c: "bg-amber-500/10 text-amber-400 border-amber-500/20" }; if (s >= 60) return { l: "可观察", c: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" }; return { l: "普通", c: "bg-slate-500/10 text-slate-400 border-slate-500/20" }; }
-function fm(v: number) { if (v >= 10000) return `¥${(v / 10000).toFixed(1)}万`; return `¥${v.toLocaleString()}`; }
-function fc(v: number) { if (v >= 10000) return `${(v / 10000).toFixed(1)}万`; return v.toLocaleString(); }
+const AI_PICKS = [
+  { name: "夏季冰丝防晒衣", price: "¥39.9", profit: "¥16.5", profitRate: "41%", reason: "季节需求强，适合短视频带货。", icon: ShoppingBag },
+  { name: "厨房沥水置物架", price: "¥49.9", profit: "¥18.6", profitRate: "37%", reason: "痛点明显，适合前后对比内容。", icon: Package },
+  { name: "儿童防晒帽", price: "¥29.9", profit: "¥12.8", profitRate: "42%", reason: "人群明确，适合宝妈内容场景。", icon: Target },
+];
 
-interface Stats { total: number; bursting: number; rising: number; risk: number; platforms: string[]; categories: string[]; }
+const PLATFORMS = ["全部", "抖音", "快手", "小红书", "淘宝", "1688", "京东", "天猫"];
+const CATEGORIES = ["全部", "服饰", "美妆", "家居", "母婴", "食品", "数码", "户外"];
+const TIME_RANGES = ["今日", "近7天", "近30天"];
+const SORT_OPTIONS = ["热度最高", "销量最高", "利润最高", "增长最快"];
+const PRICE_RANGES = ["全部", "¥0-¥50", "¥50-¥100", "¥100以上"];
+
+/* ===== Helpers ===== */
+function compBadge(c: string) {
+  switch (c) {
+    case "低": return "bg-[#f0fdf4] text-[#16a34a] border-[#16a34a]/20";
+    case "中": return "bg-[#fffbeb] text-[#f59e0b] border-[#f59e0b]/20";
+    case "高": return "bg-[#fef2f2] text-[#ef4444] border-[#ef4444]/20";
+    default: return "bg-[#f8fafc] text-[#94a3b8] border-[#e5eaf0]";
+  }
+}
+function heatBar(h: number) {
+  if (h >= 90) return "bg-gradient-to-r from-[#ff7a00] to-[#ef4444]";
+  if (h >= 80) return "bg-gradient-to-r from-[#f59e0b] to-[#ff7a00]";
+  return "bg-gradient-to-r from-[#94a3b8] to-[#64748b]";
+}
+function heatColor(h: number) {
+  if (h >= 90) return "text-[#ff7a00]";
+  if (h >= 80) return "text-[#f59e0b]";
+  return "text-[#94a3b8]";
+}
+function rankIcon(r: number) {
+  if (r === 1) return <Star className="h-4 w-4 text-amber-400 fill-amber-400" />;
+  if (r === 2) return <Star className="h-4 w-4 text-slate-300 fill-slate-300" />;
+  if (r === 3) return <Star className="h-4 w-4 text-amber-600 fill-amber-600" />;
+  return <span className="text-xs text-[#94a3b8] font-mono w-4">{r}</span>;
+}
+function suggestionBadge(s: string) {
+  if (s === "可跟进" || s === "可测试") return "bg-[#eaf4ff] text-[#1688ff]";
+  if (s === "短视频" || s === "直播带货") return "bg-[#f0fdf4] text-[#16a34a]";
+  if (s === "宝妈人群") return "bg-[#fdf2f8] text-[#db2777]";
+  if (s === "适合投流") return "bg-[#fff7ed] text-[#ff7a00]";
+  return "bg-[#f8fafc] text-[#64748b]";
+}
 
 export default function ProductRadarPage() {
-  const router = useRouter(); const supabase = createClient();
-  const [_user, setUser] = useState<{ email?: string } | null>(null);
-  const [userPlan, setUserPlan] = useState<PlanTier>("free");
-  const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<ProductTrendRow[]>([]);
-  const [stats, setStats] = useState<Stats>({ total: 0, bursting: 0, rising: 0, risk: 0, platforms: [], categories: [] });
-  const [activeTab, setActiveTab] = useState<"hot" | "rising" | "profit" | "risk" | "low_competition">("hot");
-  const [sortBy, setSortBy] = useState("hot_score"); const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [fp, setFp] = useState(""); const [fc2, setFc2] = useState(""); const [fpl, setFpl] = useState(""); const [fph, setFph] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [aiResult, setAiResult] = useState<AIProductAnalysisResult | null>(null);
-  const [aiLoading, setAiLoading] = useState(false); const [aiError, setAiError] = useState("");
-  const [forecast, setForecast] = useState<ForecastResult | null>(null);
-  const [forecastLoading, setForecastLoading] = useState(false); const [showForecast, setShowForecast] = useState(false);
+  const [activeTab, setActiveTab] = useState<"hot" | "profit" | "ai">("hot");
+  const [platform, setPlatform] = useState("全部");
+  const [category, setCategory] = useState("全部");
+  const [timeRange, setTimeRange] = useState("今日");
+  const [sortBy, setSortBy] = useState("热度最高");
+  const [priceRange, setPriceRange] = useState("全部");
+  const [addedToPlan, setAddedToPlan] = useState<Set<number>>(new Set());
 
-  const limits = PLAN_LIMITS[userPlan];
-  const visibleRows = userPlan === "free" ? rows.slice(0, limits.productRadarPerDay) : rows;
-  const truncated = userPlan === "free" && rows.length > limits.productRadarPerDay;
-
-  const tabs = [
-    { key: "hot" as const, label: "今日爆品榜", icon: Flame }, { key: "rising" as const, label: "高增长商品", icon: TrendingUp },
-    { key: "profit" as const, label: "高利润潜力", icon: DollarSign }, { key: "low_competition" as const, label: "低竞争机会", icon: Shield },
-    { key: "risk" as const, label: "风险商品", icon: AlertTriangle },
-  ];
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const p = new URLSearchParams(); p.set("tab", activeTab); p.set("sortBy", sortBy); p.set("sortDir", sortDir); p.set("limit", "50");
-      if (fp) p.set("platform", fp); if (fc2) p.set("category", fc2); if (fpl) p.set("priceMin", fpl); if (fph) p.set("priceMax", fph);
-      const r = await fetch(`/api/product-trends?${p.toString()}`); const d = await r.json();
-      if (r.ok) { setRows(d.rows || []); setStats(d.stats || { total: 0, bursting: 0, rising: 0, risk: 0, platforms: [], categories: [] }); }
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, [activeTab, sortBy, sortDir, fp, fc2, fpl, fph]);
-
-  const runAi = async () => { setAiLoading(true); setAiError(""); try { const r = await fetch("/api/product-trends/analyze", { method: "POST" }); const d = await r.json(); if (r.ok) setAiResult(d); else setAiError(d.error || "失败"); } catch { setAiError("网络错误"); } finally { setAiLoading(false); } };
-  const fetchForecast = async () => { setForecastLoading(true); try { const r = await fetch("/api/product-trends/forecast"); const d = await r.json(); if (r.ok) { setForecast(d); setShowForecast(true); } } catch (e) { console.error(e); } finally { setForecastLoading(false); } };
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      if (data.user) { fetch("/api/user").then(r => r.json()).then(u => { if (u.plan) setUserPlan(u.plan); }).catch(() => {}); }
+  const togglePlan = (rank: number) => {
+    setAddedToPlan(prev => {
+      const next = new Set(prev);
+      if (next.has(rank)) next.delete(rank); else next.add(rank);
+      return next;
     });
-  }, []);
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const hasData = rows.length > 0;
+  };
 
   return (
     <WorkspaceLayout>
-      <main className="mx-auto max-w-7xl px-6 pt-20 pb-12">
-        <div className="flex items-center justify-between mb-8">
-          <div><div className="flex items-center gap-3 mb-2"><div className="h-8 w-8 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center"><Zap className="h-4 w-4 text-rose-400" /></div><h1 className="text-2xl font-bold text-white tracking-tight">爆品雷达</h1></div><p className="text-slate-400 text-sm">发现潜力爆品，抢占先机 · {getPlanLabel(userPlan)}</p></div>
-          <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="rounded-xl border-white/[0.08] text-slate-400 hover:text-white gap-1.5">{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}刷新</Button><Button size="sm" onClick={() => router.push("/upload")} className="rounded-xl bg-indigo-600 hover:bg-indigo-500 gap-1.5"><Upload className="h-3.5 w-3.5" /> 上传商品数据</Button></div>
-        </div>
-
-        {/* 概览 */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-          {[{ label: "监测商品", value: stats.total, icon: Package, color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20" },{ label: "爆发商品", value: stats.bursting, icon: Flame, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20" },{ label: "上升商品", value: stats.rising, icon: TrendingUp, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },{ label: "风险商品", value: stats.risk, icon: AlertTriangle, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" }].map((c, i) => (
-            <motion.div key={c.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} className={cn("rounded-2xl border p-4", c.border, c.bg)}><div className="flex items-center justify-between mb-2"><span className="text-xs text-slate-400">{c.label}</span><c.icon className={cn("h-4 w-4", c.color)} /></div><p className={cn("text-2xl font-bold", c.color)}>{c.value}</p></motion.div>
-          ))}
-          <motion.button initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} onClick={runAi} disabled={aiLoading || stats.total === 0} className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/[0.05] to-indigo-500/[0.05] p-4 text-left hover:border-purple-500/30 transition-all disabled:opacity-50"><div className="flex items-center justify-between mb-2"><span className="text-xs text-slate-400">AI选品分析</span>{aiLoading ? <Loader2 className="h-4 w-4 text-purple-400 animate-spin" /> : <Brain className="h-4 w-4 text-purple-400" />}</div><p className="text-sm text-purple-300 font-medium">{aiLoading ? "分析中..." : aiResult ? "已分析" : "开始分析"}</p></motion.button>
-        </div>
-
-        {/* AI 分析结果 */}
-        {aiResult && aiResult.suggestions.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6 rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/[0.04] to-indigo-500/[0.04] p-6">
-            <div className="flex items-center gap-2 mb-1"><div className="h-7 w-7 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center"><Sparkles className="h-3.5 w-3.5 text-purple-400" /></div><h3 className="text-sm font-medium text-white">AI选品分析</h3><span className="text-[11px] text-slate-500 ml-auto">{new Date(aiResult.generatedAt).toLocaleTimeString("zh-CN")}</span></div>
-            <p className="text-sm text-purple-300/80 mt-2 mb-4">{aiResult.summary}</p>
-            <div className="space-y-3">{aiResult.suggestions.slice(0, 6).map((s, i) => (
-              <div key={i} className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 hover:bg-white/[0.04] transition-colors">
-                <div className="flex items-start justify-between gap-4"><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-1.5"><span className="text-sm font-semibold text-white">{s.product_name}</span><span className={cn("text-[11px] px-2 py-0.5 rounded-full border", getActionCol(s.action))}>{s.action}</span></div><p className="text-xs text-slate-400 mb-2">{s.reason}</p><div className="flex items-center gap-4 text-xs"><span><span className="text-slate-500">爆款概率：</span><span className="text-white font-medium">{s.burst_probability}%</span></span><span><span className="text-slate-500">利润率：</span><span className="text-white font-medium">{s.estimated_profit_rate}%</span></span><span><span className="text-slate-500">风险：</span><span className={cn("font-medium", getRiskCol(s.risk_level))}>{s.risk_level}</span></span></div></div><div className="shrink-0 text-center"><div className={cn("h-12 w-12 rounded-full border-2 flex items-center justify-center text-sm font-bold", s.burst_probability >= 80 ? "border-emerald-500/30 text-emerald-400" : s.burst_probability >= 50 ? "border-amber-500/30 text-amber-400" : "border-red-500/30 text-red-400")}>{s.burst_probability}</div><span className="text-[10px] text-slate-500 mt-0.5 block">爆款概率</span></div></div>
-                {s.risk_detail && <p className="text-[11px] text-slate-500 mt-2">{s.risk_detail}</p>}
-              </div>))}</div></motion.div>
-        )}
-        {aiError && <div className="mb-6 px-4 py-3 rounded-xl bg-red-500/5 border border-red-500/10 text-red-400 text-sm flex items-center gap-2"><AlertTriangle className="h-4 w-4 shrink-0" />{aiError}</div>}
-
-        {/* 未来爆品预测 —— 权限控制 */}
-        {stats.total > 0 && !showForecast && (
-          limits.forecast7d ? (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-              <button onClick={fetchForecast} disabled={forecastLoading} className="w-full rounded-2xl border border-amber-500/20 bg-gradient-to-r from-amber-500/[0.04] to-orange-500/[0.04] p-5 text-left hover:border-amber-500/30 transition-all">
-                <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">{forecastLoading ? <Loader2 className="h-5 w-5 text-amber-400 animate-spin" /> : <Calendar className="h-5 w-5 text-amber-400" />}</div><div><p className="text-sm font-semibold text-white">未来爆品预测</p><p className="text-xs text-slate-400 mt-0.5">预测未来7天和30天可能爆发的商品</p></div><div className="ml-auto text-slate-500"><ChevronRight className="h-5 w-5" /></div></div>
+      <div className="max-w-7xl mx-auto space-y-5">
+        {/* ── Title Card ── */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-[18px] border border-[#e5eaf0] shadow-[0_4px_16px_rgba(15,23,42,0.04)] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#ff7a00] to-[#ef4444] flex items-center justify-center shadow-sm">
+              <Flame className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider">商品雷达</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#fff7ed] text-[#ff7a00]">爆款榜单</span>
+              </div>
+              <h1 className="text-xl font-bold text-[#0f172a]">爆款榜单中心</h1>
+              <p className="text-xs text-[#64748b] mt-0.5">实时追踪高销量、高增长、高利润商品，快速发现值得跟进的爆款机会。</p>
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            {[
+              { k: "hot" as const, label: "今日榜单", icon: Flame },
+              { k: "profit" as const, label: "高利润榜", icon: DollarSign },
+              { k: "ai" as const, label: "AI推荐榜", icon: Sparkles },
+            ].map(t => (
+              <button key={t.k} onClick={() => setActiveTab(t.k)}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[12px] text-[13px] font-medium transition-all duration-150 ${
+                  activeTab === t.k
+                    ? "bg-[#eaf4ff] text-[#1688ff] border border-[#1688ff]/20"
+                    : "bg-white text-[#64748b] border border-[#e5eaf0] hover:bg-[#f8fafc] hover:text-[#0f172a]"
+                }`}>
+                <t.icon className="h-3.5 w-3.5" /> {t.label}
               </button>
-            </motion.div>
-          ) : (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-              <div className="rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] p-5">
-                <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center"><Calendar className="h-5 w-5 text-amber-500/50" /></div><div className="flex-1"><p className="text-sm font-semibold text-slate-500">未来爆品预测</p><p className="text-xs text-slate-600 mt-0.5">升级专业版解锁未来7天爆品预测，企业版解锁30天</p></div><Button size="sm" onClick={() => router.push("/pricing")} className="rounded-xl bg-amber-600 hover:bg-amber-500 gap-1.5 text-xs"><Crown className="h-3 w-3" />升级</Button></div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* ── Stats ── */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+          className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "今日上榜商品", value: "12,486", icon: Flame, color: "bg-[#fff7ed] text-[#ff7a00]" },
+            { label: "销量增长商品", value: "3,218", icon: TrendingUp, color: "bg-[#f0fdf4] text-[#16a34a]" },
+            { label: "高利润商品", value: "1,086", icon: DollarSign, color: "bg-[#eaf4ff] text-[#1688ff]" },
+            { label: "AI推荐商品", value: "326", icon: Sparkles, color: "bg-[#f5f3ff] text-[#7c3aed]" },
+          ].map((s, i) => (
+            <div key={i} className="bg-white rounded-[14px] border border-[#e5eaf0] shadow-[0_2px_8px_rgba(15,23,42,0.03)] p-4 hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(15,23,42,0.06)] transition-all duration-150">
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className={`h-8 w-8 rounded-lg ${s.color} flex items-center justify-center`}>
+                  <s.icon className="h-4 w-4" />
+                </div>
+                <span className="text-[11px] text-[#94a3b8] font-medium">{s.label}</span>
+              </div>
+              <p className="text-2xl font-bold text-[#0f172a]">{s.value}</p>
+            </div>
+          ))}
+        </motion.div>
+
+        {/* ── Filters ── */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+          className="bg-white rounded-[18px] border border-[#e5eaf0] shadow-[0_4px_16px_rgba(15,23,42,0.04)] p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Filter className="h-4 w-4 text-[#94a3b8]" />
+            <span className="text-sm font-semibold text-[#0f172a]">筛选商品机会</span>
+          </div>
+          <div className="space-y-3">
+            {/* Platform */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[11px] text-[#94a3b8] font-medium w-10 shrink-0">平台</span>
+              {PLATFORMS.map(p => (
+                <button key={p} onClick={() => setPlatform(p)}
+                  className={`px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all ${
+                    platform === p ? "bg-[#eaf4ff] text-[#1688ff] border border-[#1688ff]/20" : "bg-[#f8fafc] text-[#64748b] border border-[#e5eaf0] hover:bg-white"
+                  }`}>{p}</button>
+              ))}
+            </div>
+            {/* Category + Time */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[11px] text-[#94a3b8] font-medium w-10 shrink-0">类目</span>
+              {CATEGORIES.map(c => (
+                <button key={c} onClick={() => setCategory(c)}
+                  className={`px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all ${
+                    category === c ? "bg-[#eaf4ff] text-[#1688ff] border border-[#1688ff]/20" : "bg-[#f8fafc] text-[#64748b] border border-[#e5eaf0] hover:bg-white"
+                  }`}>{c}</button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[11px] text-[#94a3b8] font-medium w-10 shrink-0">时间</span>
+              {TIME_RANGES.map(t => (
+                <button key={t} onClick={() => setTimeRange(t)}
+                  className={`px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all ${
+                    timeRange === t ? "bg-[#eaf4ff] text-[#1688ff] border border-[#1688ff]/20" : "bg-[#f8fafc] text-[#64748b] border border-[#e5eaf0] hover:bg-white"
+                  }`}>{t}</button>
+              ))}
+            </div>
+            {/* Sort + Price */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[11px] text-[#94a3b8] font-medium w-10 shrink-0">排序</span>
+              {SORT_OPTIONS.map(s => (
+                <button key={s} onClick={() => setSortBy(s)}
+                  className={`px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all ${
+                    sortBy === s ? "bg-[#eaf4ff] text-[#1688ff] border border-[#1688ff]/20" : "bg-[#f8fafc] text-[#64748b] border border-[#e5eaf0] hover:bg-white"
+                  }`}>{s}</button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[11px] text-[#94a3b8] font-medium w-10 shrink-0">价格</span>
+              {PRICE_RANGES.map(p => (
+                <button key={p} onClick={() => setPriceRange(p)}
+                  className={`px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all ${
+                    priceRange === p ? "bg-[#eaf4ff] text-[#1688ff] border border-[#1688ff]/20" : "bg-[#f8fafc] text-[#64748b] border border-[#e5eaf0] hover:bg-white"
+                  }`}>{p}</button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Main Content: Table + Analysis Panel ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5">
+          {/* Table */}
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+            className="bg-white rounded-[18px] border border-[#e5eaf0] shadow-[0_4px_16px_rgba(15,23,42,0.04)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#e5eaf0] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-lg bg-[#fff7ed] flex items-center justify-center"><Flame className="h-3.5 w-3.5 text-[#ff7a00]" /></div>
+                <h3 className="text-sm font-bold text-[#0f172a]">今日爆款商品</h3>
+                <span className="text-xs text-[#94a3b8]">({MOCK_PRODUCTS.length})</span>
+              </div>
+              <div className="flex gap-1.5">
+                <button className="px-2.5 py-1.5 rounded-[10px] text-[11px] text-[#94a3b8] hover:text-[#475569] hover:bg-[#f8fafc] transition-all flex items-center gap-1">
+                  <Filter className="h-3 w-3" />筛选
+                </button>
+                <button className="px-2.5 py-1.5 rounded-[10px] text-[11px] text-[#94a3b8] hover:text-[#475569] hover:bg-[#f8fafc] transition-all flex items-center gap-1">
+                  <Download className="h-3 w-3" />导出
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#f8fafc] border-b border-[#e5eaf0]">
+                    {["排名","商品名称","平台","类目","售价","近7日销量","预估利润","利润率","热度","竞争度","AI建议","操作"].map(h => (
+                      <th key={h} className="text-left px-3 py-3 text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {MOCK_PRODUCTS.map((p, i) => (
+                    <motion.tr key={p.rank} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 + i * 0.03 }}
+                      className={`border-b border-[#e5eaf0] hover:bg-[#f8fafc] transition-colors ${p.rank <= 3 ? "bg-[#fffbeb]/30" : ""}`}>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-1">{rankIcon(p.rank)}</div>
+                      </td>
+                      <td className="px-3 py-3 font-semibold text-[#0f172a] text-[13px] max-w-[160px] truncate">{p.name}</td>
+                      <td className="px-3 py-3">
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${
+                          p.platform === "1688" ? "bg-[#fff7ed] text-[#ff7a00]" :
+                          p.platform === "淘宝" ? "bg-[#eaf4ff] text-[#1688ff]" :
+                          p.platform === "京东" ? "bg-[#fef2f2] text-[#ef4444]" :
+                          "bg-[#f8fafc] text-[#475569]"
+                        }`}>{p.platform}</span>
+                      </td>
+                      <td className="px-3 py-3 text-[#64748b] text-[12px]">{p.category}</td>
+                      <td className="px-3 py-3 font-bold text-[#ff7a00] text-[13px]">{p.price}</td>
+                      <td className="px-3 py-3 text-[#0f172a] text-[12px]">{p.sales}</td>
+                      <td className="px-3 py-3 font-semibold text-[#16a34a] text-[12px]">{p.profit}</td>
+                      <td className="px-3 py-3 font-semibold text-[#16a34a] text-[12px]">{p.profitRate}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 rounded-full bg-[#e5eaf0] overflow-hidden">
+                            <div className={`h-full rounded-full ${heatBar(p.heat)}`} style={{ width: `${p.heat}%` }} />
+                          </div>
+                          <span className={`text-[11px] font-semibold ${heatColor(p.heat)}`}>{p.heat}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${compBadge(p.competition)}`}>{p.competition}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${suggestionBadge(p.aiSuggestion)}`}>{p.aiSuggestion}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <button onClick={() => togglePlan(p.rank)}
+                          className={`text-[11px] px-2 py-1 rounded-[8px] font-medium transition-all ${
+                            addedToPlan.has(p.rank)
+                              ? "bg-[#f0fdf4] text-[#16a34a] border border-[#16a34a]/20"
+                              : "bg-[#f8fafc] text-[#64748b] border border-[#e5eaf0] hover:bg-[#eaf4ff] hover:text-[#1688ff] hover:border-[#1688ff]/20"
+                          }`}>
+                          {addedToPlan.has(p.rank) ? "已加入" : "加入选品库"}
+                        </button>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+
+          {/* Analysis Panel */}
+          <div className="space-y-4">
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}
+              className="bg-white rounded-[18px] border border-[#e5eaf0] shadow-[0_4px_16px_rgba(15,23,42,0.04)] p-5">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="h-8 w-8 rounded-lg bg-[#eaf4ff] flex items-center justify-center">
+                  <BarChart3 className="h-4 w-4 text-[#1688ff]" />
+                </div>
+                <h3 className="text-sm font-bold text-[#0f172a]">榜单分析</h3>
+              </div>
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e5eaf0]">
+                  <p className="text-[11px] text-[#94a3b8] mb-1">今日高热类目</p>
+                  <p className="text-[13px] font-semibold text-[#0f172a]">服饰 · 家居 · 母婴</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-3 rounded-xl bg-[#f0fdf4] border border-[#16a34a]/10">
+                    <p className="text-[11px] text-[#16a34a] mb-1">平均利润率</p>
+                    <p className="text-lg font-bold text-[#16a34a]">38.6%</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[#eaf4ff] border border-[#1688ff]/10">
+                    <p className="text-[11px] text-[#1688ff] mb-1">低竞争机会</p>
+                    <p className="text-xs font-medium text-[#0f172a] leading-relaxed">家居收纳 · 儿童出行 · 防晒</p>
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-[#f8fafc] border border-[#e5eaf0]">
+                  <p className="text-[11px] text-[#94a3b8] mb-1">建议关注</p>
+                  <p className="text-xs text-[#475569] leading-relaxed">夏季需求、低价高频、短视频展示效果强的商品</p>
+                </div>
               </div>
             </motion.div>
-          )
-        )}
 
-        {/* 预测结果 */}
-        {showForecast && forecast && forecast.forecasts.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6 rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.04] to-orange-500/[0.04] p-6">
-            <div className="flex items-center justify-between mb-4"><div className="flex items-center gap-2"><div className="h-7 w-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center"><Calendar className="h-3.5 w-3.5 text-amber-400" /></div><h3 className="text-sm font-medium text-white">未来爆品预测</h3></div><button onClick={() => setShowForecast(false)} className="text-xs text-slate-500 hover:text-white transition-colors">收起</button></div>
-            <p className="text-xs text-slate-500 mb-1">{forecast.summary}</p><p className="text-[10px] text-slate-600 mb-4">⚠ 预测仅供经营参考</p>
-            <div className="space-y-3">{forecast.forecasts.slice(0, 8).map((f, i) => (
-              <div key={i} className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4">
-                <div className="flex items-start justify-between gap-4 mb-3"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="text-sm font-semibold text-white">{f.product_name}</span><span className="text-[11px] text-slate-500">{f.category} · ¥{f.price}</span></div><div className="flex items-center gap-6 mt-3">
-                  <div><p className="text-[11px] text-slate-500 mb-1">7天爆发概率</p><div className="flex items-center gap-2"><div className="w-20 h-2 rounded-full bg-white/[0.06] overflow-hidden"><div className={cn("h-full rounded-full", f.burst_7d_probability >= 80 ? "bg-rose-500" : f.burst_7d_probability >= 60 ? "bg-amber-500" : "bg-slate-500")} style={{ width: `${f.burst_7d_probability}%` }} /></div><span className="text-sm font-bold text-white">{f.burst_7d_probability}%</span><span className={cn("text-[10px] px-1.5 py-0.5 rounded", f.trend_7d === "强爆发" ? "bg-rose-500/10 text-rose-400" : f.trend_7d === "上升" ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-500/10 text-slate-400")}>{f.trend_7d}</span></div></div>
-                  {limits.forecast30d ? (
-                    <div><p className="text-[11px] text-slate-500 mb-1">30天爆发概率</p><div className="flex items-center gap-2"><div className="w-20 h-2 rounded-full bg-white/[0.06] overflow-hidden"><div className={cn("h-full rounded-full", f.burst_30d_probability >= 70 ? "bg-amber-500" : "bg-slate-500")} style={{ width: `${f.burst_30d_probability}%` }} /></div><span className="text-sm font-bold text-white">{f.burst_30d_probability}%</span><span className={cn("text-[10px] px-1.5 py-0.5 rounded", f.trend_30d === "强爆发" ? "bg-rose-500/10 text-rose-400" : f.trend_30d === "上升" ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-500/10 text-slate-400")}>{f.trend_30d}</span></div></div>
-                  ) : (
-                    <div className="text-center"><p className="text-[11px] text-slate-600 mb-1">30天预测</p><Button variant="outline" size="sm" onClick={() => router.push("/pricing")} className="rounded-lg border-amber-500/20 text-amber-400 text-[10px] h-7 px-2">企业版解锁</Button></div>
-                  )}
-                </div></div>
-                <div className="shrink-0 grid grid-cols-2 gap-2 text-center"><div className="bg-white/[0.03] rounded-xl px-3 py-2"><p className="text-[10px] text-slate-500">建议备货</p><p className="text-sm font-bold text-white">{f.suggested_stock}件</p></div><div className="bg-white/[0.03] rounded-xl px-3 py-2"><p className="text-[10px] text-slate-500">测试预算</p><p className="text-sm font-bold text-white">¥{f.suggested_test_budget}</p></div></div></div>
-                {f.risks.length > 0 && <div className="flex flex-wrap gap-1.5">{f.risks.map((r, ri) => (<span key={ri} className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/5 text-red-400/80 border border-red-500/10">{r}</span>))}</div>}
-              </div>))}</div></motion.div>
-        )}
-
-        {/* Tab + 排序 */}
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-x-auto">{tabs.map(t => (<button key={t.key} onClick={() => setActiveTab(t.key)} className={cn("flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap", activeTab === t.key ? "bg-white/[0.08] text-white" : "text-slate-400 hover:text-white")}><t.icon className="h-4 w-4" />{t.label}</button>))}</div>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] text-slate-300 text-sm px-3"><option value="hot_score">爆款指数</option><option value="sales_growth_rate">销量增长率</option><option value="gmv_growth_rate">GMV增长率</option><option value="profit_margin_estimate">利润率潜力</option><option value="price">价格</option></select>
-          <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} className="h-9 px-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-slate-400 hover:text-white text-sm">{sortDir === "desc" ? "↓ 降序" : "↑ 升序"}</button>
-          {stats.platforms.length > 0 && (<button onClick={() => setShowFilters(!showFilters)} className={cn("h-9 px-3 rounded-xl border text-sm gap-1.5 flex items-center", showFilters ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400" : "bg-white/[0.03] border-white/[0.06] text-slate-400 hover:text-white")}><Search className="h-3.5 w-3.5" />筛选</button>)}
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}
+              className="bg-gradient-to-br from-[#eaf4ff] to-white rounded-[18px] border border-[#1688ff]/15 shadow-[0_4px_16px_rgba(15,23,42,0.04)] p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-[#1688ff]" />
+                <span className="text-sm font-bold text-[#0f172a]">AI榜单结论</span>
+              </div>
+              <p className="text-[11px] text-[#475569] leading-relaxed">
+                今日榜单中，夏季防晒、厨房收纳和儿童出行类商品热度上升明显。建议优先筛选利润率35%以上、竞争度中低、适合短视频展示的商品进行测试。
+              </p>
+            </motion.div>
+          </div>
         </div>
 
-        {showFilters && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mb-6 p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div><label className="text-[11px] text-slate-500 mb-1 block">平台</label><select value={fp} onChange={e => setFp(e.target.value)} className="w-full h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] text-slate-300 text-sm px-3"><option value="">全部平台</option>{stats.platforms.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
-          <div><label className="text-[11px] text-slate-500 mb-1 block">类目</label><select value={fc2} onChange={e => setFc2(e.target.value)} className="w-full h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] text-slate-300 text-sm px-3"><option value="">全部类目</option>{stats.categories.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-          <div><label className="text-[11px] text-slate-500 mb-1 block">最低价</label><input type="number" placeholder="¥最低" value={fpl} onChange={e => setFpl(e.target.value)} className="w-full h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] text-slate-300 text-sm px-3 placeholder:text-slate-600" /></div>
-          <div><label className="text-[11px] text-slate-500 mb-1 block">最高价</label><input type="number" placeholder="¥最高" value={fph} onChange={e => setFph(e.target.value)} className="w-full h-9 rounded-xl bg-white/[0.03] border border-white/[0.06] text-slate-300 text-sm px-3 placeholder:text-slate-600" /></div>
-          <div className="flex items-end"><Button variant="outline" size="sm" onClick={() => { setFp(""); setFc2(""); setFpl(""); setFph(""); }} className="rounded-xl border-white/[0.08] text-slate-400 hover:text-white w-full">清除筛选</Button></div>
-        </motion.div>)}
-
-        {/* 空数据 */}
-        {!loading && !hasData && (<div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-16 text-center"><Package className="h-12 w-12 mx-auto text-slate-700 mb-4" /><h3 className="text-lg font-semibold text-white mb-2">暂无商品数据</h3><p className="text-slate-400 text-sm mb-6">请上传商品趋势Excel，AI会帮你发现爆品机会</p><Button onClick={() => router.push("/upload")} className="rounded-xl bg-indigo-600 hover:bg-indigo-500 gap-2"><Upload className="h-4 w-4" /> 上传商品数据</Button></div>)}
-
-        {loading && (<div className="space-y-3">{[1,2,3].map(i => (<div key={i} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 animate-pulse"><div className="h-4 w-48 bg-white/[0.04] rounded mb-3" /><div className="h-3 w-32 bg-white/[0.03] rounded" /></div>))}</div>)}
-
-        {/* 截断提示 */}
-        {hasData && truncated && (
-          <div className="mb-4 px-4 py-3 rounded-xl bg-indigo-500/5 border border-indigo-500/10 flex items-center justify-between">
-            <div className="flex items-center gap-2"><Crown className="h-4 w-4 text-indigo-400" /><span className="text-xs text-indigo-300">免费版显示前{limits.productRadarPerDay}个，升级查看全部{rows.length}个商品</span></div>
-            <Button variant="outline" size="sm" onClick={() => router.push("/pricing")} className="rounded-xl border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 text-xs gap-1">升级专业版</Button>
+        {/* ── AI Picks ── */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="h-7 w-7 rounded-lg bg-[#f5f3ff] flex items-center justify-center">
+                <Zap className="h-3.5 w-3.5 text-[#7c3aed]" />
+              </div>
+              <h3 className="text-sm font-bold text-[#0f172a]">AI精选高利润商品</h3>
+            </div>
+            <Link href="/ai-assistant" className="text-[11px] text-[#1688ff] hover:text-[#1670d9] font-medium flex items-center gap-1 transition-colors">
+              查看全部 <ChevronRight className="h-3 w-3" />
+            </Link>
           </div>
-        )}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {AI_PICKS.map((item, i) => (
+              <div key={i} className="bg-white rounded-[16px] border border-[#e5eaf0] shadow-[0_4px_16px_rgba(15,23,42,0.04)] p-5 hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all duration-200 group">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="h-9 w-9 rounded-xl bg-[#f8fafc] border border-[#e5eaf0] flex items-center justify-center">
+                    <item.icon className="h-4.5 w-4.5 text-[#94a3b8]" />
+                  </div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#f0fdf4] text-[#16a34a]">高利润</span>
+                </div>
+                <h4 className="text-sm font-bold text-[#0f172a] mb-2">{item.name}</h4>
+                <div className="flex items-center gap-4 mb-3">
+                  <span className="text-[13px] font-bold text-[#ff7a00]">{item.price}</span>
+                  <span className="text-[13px] font-bold text-[#16a34a]">利润 {item.profit}</span>
+                  <span className="text-[12px] text-[#16a34a] font-medium">{item.profitRate}</span>
+                </div>
+                <p className="text-[11px] text-[#64748b] leading-relaxed mb-4">{item.reason}</p>
+                <div className="flex gap-2">
+                  <button className="flex-1 py-2 rounded-[10px] text-[11px] font-medium bg-[#f8fafc] text-[#64748b] border border-[#e5eaf0] hover:bg-[#eaf4ff] hover:text-[#1688ff] hover:border-[#1688ff]/20 transition-all">
+                    加入选品库
+                  </button>
+                  <button className="flex-1 py-2 rounded-[10px] text-[11px] font-medium bg-[#eaf4ff] text-[#1688ff] hover:bg-[#1688ff] hover:text-white transition-all">
+                    生成AI分析
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
 
-        {hasData && (<div className="space-y-3">{visibleRows.map((p, i) => { const lv = getLvl(p.hot_score); return (<motion.div key={p.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.1] p-5"><div className="flex flex-col md:flex-row md:items-center gap-4"><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-1.5"><span className="text-sm font-semibold text-white truncate">{p.product_name}</span><span className={cn("text-[11px] px-2 py-0.5 rounded-full border flex items-center gap-1 shrink-0", getTrendColor(p.trend_status))}>{getTrendIcon(p.trend_status)}{p.trend_status}</span></div><div className="flex items-center gap-3 text-xs text-slate-500"><span>{p.category || "未分类"}</span><span>¥{p.price}</span><span className={cn("px-1.5 py-0.5 rounded text-[11px]", getCompColor(p.competition_level))}>{p.competition_level}竞争</span>{p.platform && p.platform !== "unknown" && <span className="text-slate-600">{p.platform}</span>}</div></div><div className="flex items-center gap-4 md:gap-6 flex-wrap"><div className="text-center"><p className="text-xs text-slate-500 mb-0.5">近7天销量</p><p className="text-sm font-bold text-white">{fc(p.sales_7d)}</p><p className={cn("text-[11px]", p.sales_growth_rate >= 0 ? "text-emerald-400" : "text-red-400")}>{p.sales_growth_rate >= 0 ? "+" : ""}{p.sales_growth_rate}%</p></div><div className="text-center"><p className="text-xs text-slate-500 mb-0.5">近7天GMV</p><p className="text-sm font-bold text-white">{fm(p.gmv_7d)}</p><p className={cn("text-[11px]", p.gmv_growth_rate >= 0 ? "text-emerald-400" : "text-red-400")}>{p.gmv_growth_rate >= 0 ? "+" : ""}{p.gmv_growth_rate}%</p></div><div className="text-center"><p className="text-xs text-slate-500 mb-0.5">爆款指数</p><div className="flex items-center gap-1.5"><div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden"><div className={cn("h-full rounded-full", getScoreBar(p.hot_score))} style={{ width: `${p.hot_score}%` }} /></div><span className="text-sm font-bold text-white">{p.hot_score}</span></div></div><div className="text-center"><p className="text-xs text-slate-500 mb-0.5">利润潜力</p><span className="text-sm font-bold text-white">{Math.round((p.profit_margin_estimate || 0) * 100)}%</span></div><span className={cn("text-[11px] px-2 py-1 rounded-lg font-medium border shrink-0", lv.c)}>{lv.l}</span></div></div></motion.div>); })}</div>)}
-      </main>
+        {/* ── CTA ── */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+          className="bg-gradient-to-r from-[#eaf4ff] via-white to-[#fff7ed] rounded-[20px] border border-[#e5eaf0] shadow-[0_4px_16px_rgba(15,23,42,0.04)] p-8 md:p-10 text-center">
+          <Search className="h-8 w-8 mx-auto text-[#1688ff] mb-3" />
+          <h3 className="text-lg font-bold text-[#0f172a] mb-2">想从榜单里快速筛出适合你的商品？</h3>
+          <p className="text-sm text-[#64748b] mb-6 max-w-lg mx-auto">
+            进入 AI智能选品，输入类目、预算和利润目标，自动生成选品方案。
+          </p>
+          <Link href="/ai-assistant">
+            <Button className="rounded-xl bg-[#1688ff] hover:bg-[#1670d9] text-white shadow-lg shadow-[#1688ff]/25 h-11 px-6 text-sm font-bold gap-2">
+              <Sparkles className="h-4 w-4" /> 去 AI选品
+            </Button>
+          </Link>
+        </motion.div>
+      </div>
     </WorkspaceLayout>
   );
 }
