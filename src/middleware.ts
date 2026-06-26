@@ -30,7 +30,7 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isAuthRoute = PUBLIC_ROUTES.includes(pathname);
-  const isPublic = pathname === "/" || pathname.startsWith("/api") || pathname === "/pricing";
+  const isPublic = pathname === "/" || pathname.startsWith("/api") || pathname === "/pricing" || pathname.startsWith("/auth");
 
   if (!user && !isAuthRoute && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
