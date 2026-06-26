@@ -1,10 +1,10 @@
-﻿/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Navbar } from "@/components/layout/navbar";
+import { WorkspaceLayout } from "@/components/layout/workspace-layout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import {
@@ -83,8 +83,7 @@ export default function ProductRadarPage() {
   const hasData = rows.length > 0;
 
   return (
-    <div className="min-h-screen bg-[#09090b]">
-      <Navbar showAuth={false} />
+    <WorkspaceLayout>
       <main className="mx-auto max-w-7xl px-6 pt-20 pb-12">
         <div className="flex items-center justify-between mb-8">
           <div><div className="flex items-center gap-3 mb-2"><div className="h-8 w-8 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center"><Zap className="h-4 w-4 text-rose-400" /></div><h1 className="text-2xl font-bold text-white tracking-tight">爆品雷达</h1></div><p className="text-slate-400 text-sm">发现潜力爆品，抢占先机 · {getPlanLabel(userPlan)}</p></div>
@@ -180,6 +179,6 @@ export default function ProductRadarPage() {
 
         {hasData && (<div className="space-y-3">{visibleRows.map((p, i) => { const lv = getLvl(p.hot_score); return (<motion.div key={p.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.1] p-5"><div className="flex flex-col md:flex-row md:items-center gap-4"><div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-1.5"><span className="text-sm font-semibold text-white truncate">{p.product_name}</span><span className={cn("text-[11px] px-2 py-0.5 rounded-full border flex items-center gap-1 shrink-0", getTrendColor(p.trend_status))}>{getTrendIcon(p.trend_status)}{p.trend_status}</span></div><div className="flex items-center gap-3 text-xs text-slate-500"><span>{p.category || "未分类"}</span><span>¥{p.price}</span><span className={cn("px-1.5 py-0.5 rounded text-[11px]", getCompColor(p.competition_level))}>{p.competition_level}竞争</span>{p.platform && p.platform !== "unknown" && <span className="text-slate-600">{p.platform}</span>}</div></div><div className="flex items-center gap-4 md:gap-6 flex-wrap"><div className="text-center"><p className="text-xs text-slate-500 mb-0.5">近7天销量</p><p className="text-sm font-bold text-white">{fc(p.sales_7d)}</p><p className={cn("text-[11px]", p.sales_growth_rate >= 0 ? "text-emerald-400" : "text-red-400")}>{p.sales_growth_rate >= 0 ? "+" : ""}{p.sales_growth_rate}%</p></div><div className="text-center"><p className="text-xs text-slate-500 mb-0.5">近7天GMV</p><p className="text-sm font-bold text-white">{fm(p.gmv_7d)}</p><p className={cn("text-[11px]", p.gmv_growth_rate >= 0 ? "text-emerald-400" : "text-red-400")}>{p.gmv_growth_rate >= 0 ? "+" : ""}{p.gmv_growth_rate}%</p></div><div className="text-center"><p className="text-xs text-slate-500 mb-0.5">爆款指数</p><div className="flex items-center gap-1.5"><div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden"><div className={cn("h-full rounded-full", getScoreBar(p.hot_score))} style={{ width: `${p.hot_score}%` }} /></div><span className="text-sm font-bold text-white">{p.hot_score}</span></div></div><div className="text-center"><p className="text-xs text-slate-500 mb-0.5">利润潜力</p><span className="text-sm font-bold text-white">{Math.round((p.profit_margin_estimate || 0) * 100)}%</span></div><span className={cn("text-[11px] px-2 py-1 rounded-lg font-medium border shrink-0", lv.c)}>{lv.l}</span></div></div></motion.div>); })}</div>)}
       </main>
-    </div>
+    </WorkspaceLayout>
   );
 }
