@@ -1,509 +1,228 @@
 ﻿"use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { Navbar } from "@/components/layout/navbar";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Send, User, Bot, Plus, Trash2, MessageSquare,
-  Zap, TrendingUp, Target, BarChart3, ChevronRight,
-  Loader2, Brain, Copy, Check
-} from "lucide-react";
+import { WorkspaceLayout } from "@/components/layout/workspace-layout";
+import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import {
+  Sparkles, Search, ShoppingBag, Target, Filter, Download,
+  FolderOpen, ClipboardList, ChevronRight,
+} from "lucide-react";
 
-/* ── Types ── */
-interface Message { id: string; role: "user" | "assistant"; content: string; timestamp: number }
-interface Conversation { id: string; title: string; messages: Message[]; createdAt: number }
-
-const QUICK_PROMPTS = [
-  { icon: TrendingUp, text: "如何提升直播间ROI？" },
-  { icon: Target, text: "怎么判断素材是否该加投？" },
-  { icon: BarChart3, text: "帮我分析最近的投流数据" },
-  { icon: Zap, text: "有哪些降低投流成本的方法？" },
+/* ===== MOCK DATA ===== */
+const MOCK_RESULTS = [
+  { id: 1, name: "夏季冰丝防晒衣UPF50+", platform: "1688", category: "服饰内衣", price: "¥39.9", sales: "12.8万", profit: "¥16.5", profitRate: "41%", heat: 98, competition: "中", aiScore: 96, aiSuggestion: "季节需求强，价格带稳定，适合短视频带货测试。" },
+  { id: 2, name: "厨房沥水置物架双层", platform: "1688", category: "家居日用", price: "¥49.9", sales: "5.1万", profit: "¥18.6", profitRate: "37%", heat: 89, competition: "低", aiScore: 88, aiSuggestion: "痛点明显，前后对比内容效果好。" },
+  { id: 3, name: "儿童防晒帽UPF50+", platform: "淘宝", category: "母婴用品", price: "¥29.9", sales: "6.5万", profit: "¥12.8", profitRate: "42%", heat: 91, competition: "中", aiScore: 89, aiSuggestion: "人群明确，适合宝妈内容场景。" },
+  { id: 4, name: "大容量运动水壶2L", platform: "1688", category: "运动户外", price: "¥49", sales: "4.8万", profit: "¥18.6", profitRate: "38%", heat: 88, competition: "低", aiScore: 85, aiSuggestion: "实用性强，适合直播带货场景。" },
+  { id: 5, name: "磁吸充电宝10000mAh", platform: "京东", category: "3C数码", price: "¥79", sales: "2.8万", profit: "¥28.4", profitRate: "36%", heat: 78, competition: "高", aiScore: 72, aiSuggestion: "竞争激烈，需差异化卖点。" },
 ];
 
-/* ── Load conversations from localStorage ── */
-function loadConversations(): Conversation[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem("ai-chat-conversations");
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
+const AI_ANALYSIS_DEFAULT = { score: 96, profitLevel: "优秀", heatLevel: "高", riskLevel: "中", channels: "短视频带货 / 直播间转化", testBudget: "¥300 - ¥800", conclusion: "该商品具备季节需求强、价格带稳定、内容展示效果好三个优势，建议先制作3条不同卖点短视频进行测试。" };
 
-function saveConversations(convs: Conversation[]) {
-  if (typeof window === "undefined") return;
-  try { localStorage.setItem("ai-chat-conversations", JSON.stringify(convs)); } catch {}
-}
+function getCompetitionBadge(level: string) { if (level === "低") return "bg-emerald-50 text-emerald-600 border-emerald-200"; if (level === "中") return "bg-amber-50 text-amber-600 border-amber-200"; return "bg-red-50 text-red-600 border-red-200"; }
+function getHeatColor(heat: number) { if (heat >= 90) return "bg-gradient-to-r from-orange-500 to-red-500"; if (heat >= 80) return "bg-gradient-to-r from-amber-400 to-orange-500"; return "bg-gradient-to-r from-gray-400 to-gray-500"; }
+function AIAssistantPageContent() {
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q") || "";
+  const [, setUser] = useState<{ email?: string } | null>(null);
+  const [, setAuthLoading] = useState(true);
+  const [platform, setPlatform] = useState("1688");
+  const [method, setMethod] = useState("keyword");
+  const [keyword, setKeyword] = useState(initialQuery);
+  const [hasSearched, setHasSearched] = useState(!!initialQuery);
+  const [results, setResults] = useState<typeof MOCK_RESULTS>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [searching, setSearching] = useState(false);
 
-function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
-
-/* ── Streaming hook ── */
-function useChatStream() {
-  const [streaming, setStreaming] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const sendMessage = useCallback(async (
-    userMessage: string,
-    history: Message[],
-    onToken: (token: string) => void,
-    onDone: () => void,
-    onError: (err: string) => void,
-  ) => {
-    setStreaming(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, messages: history }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: "请求失败" }));
-        onError(errData.error || "请求失败");
-        setStreaming(false);
-        return;
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) { onError("无法读取响应"); setStreaming(false); return; }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") { onDone(); setStreaming(false); return; }
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) onToken(parsed.content);
-              if (parsed.error) { onError(parsed.error); setStreaming(false); return; }
-            } catch {}
-          }
-        }
-      }
-      onDone();
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === "AbortError") return;
-      onError("网络连接异常");
-    } finally {
-      setStreaming(false);
-    }
-  }, []);
-
-  const abort = useCallback(() => {
-    abortRef.current?.abort();
-    setStreaming(false);
-  }, []);
-
-  return { streaming, sendMessage, abort };
-}
-
-/* ═══════════════════════════════════════
-   MESSAGE BUBBLE
-   ═══════════════════════════════════════ */
-function MessageBubble({ msg, isLast, streaming }: { msg: Message; isLast: boolean; streaming: boolean }) {
-  const isUser = msg.role === "user";
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
-    >
-      {/* AI Avatar */}
-      {!isUser && (
-        <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5 shadow-lg shadow-indigo-500/20">
-          <Bot className="h-4 w-4 text-white" />
-        </div>
-      )}
-
-      {/* Bubble */}
-      <div className={`max-w-[85%] sm:max-w-[75%] ${isUser ? "order-first" : ""}`}>
-        <div
-          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-            isUser
-              ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/15"
-              : "bg-white/[0.04] border border-white/[0.06] text-slate-200"
-          }`}
-        >
-          {/* Streaming cursor */}
-          <span className="whitespace-pre-wrap break-words">
-            {msg.content}
-            {isLast && streaming && (
-              <span className="inline-block w-2 h-4 ml-0.5 bg-indigo-400 animate-pulse rounded-sm align-middle" />
-            )}
-          </span>
-        </div>
-
-        {/* Actions */}
-        {!isUser && msg.content && !streaming && (
-          <div className="flex items-center gap-2 mt-1.5 ml-1">
-            <button
-              onClick={() => { navigator.clipboard.writeText(msg.content); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-              className="p-1 rounded-md text-slate-600 hover:text-slate-400 transition-colors"
-            >
-              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* User Avatar */}
-      {isUser && (
-        <div className="h-8 w-8 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0 mt-0.5">
-          <User className="h-4 w-4 text-slate-400" />
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-/* ═══════════════════════════════════════
-   EMPTY STATE
-   ═══════════════════════════════════════ */
-function EmptyState({ onPrompt }: { onPrompt: (text: string) => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-16 px-4"
-    >
-      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center mb-6">
-        <Brain className="h-8 w-8 text-indigo-400" />
-      </div>
-      <h2 className="text-xl font-bold text-white mb-2">AI 投流助手</h2>
-      <p className="text-slate-400 text-sm text-center max-w-md mb-8">
-        我是你的专属投流顾问，可以帮你分析数据、优化策略、解答任何投流相关问题。
-      </p>
-
-      {/* Quick prompts */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-lg">
-        {QUICK_PROMPTS.map((p, i) => (
-          <motion.button
-            key={i}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.08 }}
-            onClick={() => onPrompt(p.text)}
-            className="flex items-center gap-3 p-3.5 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all text-left group"
-          >
-            <div className="h-8 w-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-              <p.icon className="h-4 w-4 text-indigo-400" />
-            </div>
-            <span className="text-sm text-slate-300 group-hover:text-white transition-colors">{p.text}</span>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-600 ml-auto shrink-0" />
-          </motion.button>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-
-/* ═══════════════════════════════════════
-   MAIN PAGE
-   ═══════════════════════════════════════ */
-export default function AIAssistantPage() {
-  const [user, setUser] = useState<{ email?: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
-  const [input, setInput] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const router = useRouter();
-  const supabase = createClient();
-  const { streaming, sendMessage, abort } = useChatStream();
-
-  /* Auth */
   useEffect(() => {
+    const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setLoading(false);
+      if (data.user) setUser({ email: data.user.email });
+      setAuthLoading(false);
     });
   }, []);
 
-  /* Load conversations */
-  useEffect(() => {
-    const convs = loadConversations();
-    setConversations(convs);
-    if (convs.length > 0) setActiveConvId(convs[0]?.id ?? null);
-  }, []);
-
-  /* Scroll to bottom */
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversations, activeConvId, streaming]);
-
-  const activeConv = conversations.find(c => c.id === activeConvId);
-  const messages = activeConv?.messages || [];
-
-  /* Send message */
-  const handleSend = useCallback(async (text?: string) => {
-    const msgText = (text || input).trim();
-    if (!msgText || streaming) return;
-    setInput("");
-
-    const userMsg: Message = { id: generateId(), role: "user", content: msgText, timestamp: Date.now() };
-
-    let targetConvId = activeConvId;
-    let updatedConvs = [...conversations];
-
-    if (!targetConvId) {
-      // Create new conversation
-      const newConv: Conversation = {
-        id: generateId(),
-        title: msgText.slice(0, 30) + (msgText.length > 30 ? "..." : ""),
-        messages: [userMsg],
-        createdAt: Date.now(),
-      };
-      updatedConvs = [newConv, ...updatedConvs];
-      targetConvId = newConv.id;
-    } else {
-      updatedConvs = updatedConvs.map(c =>
-        c.id === targetConvId ? { ...c, messages: [...c.messages, userMsg] } : c
-      );
-    }
-
-    setConversations(updatedConvs);
-    setActiveConvId(targetConvId);
-    saveConversations(updatedConvs);
-
-    // Create placeholder for AI response
-    const aiMsg: Message = { id: generateId(), role: "assistant", content: "", timestamp: Date.now() };
-
-    const convWithPlaceholder = updatedConvs.map(c =>
-      c.id === targetConvId ? { ...c, messages: [...c.messages, aiMsg] } : c
-    );
-    setConversations(convWithPlaceholder);
-    saveConversations(convWithPlaceholder);
-
-    let fullContent = "";
-
-    await sendMessage(
-      msgText,
-      updatedConvs.find(c => c.id === targetConvId)?.messages || [],
-      (token) => {
-        fullContent += token;
-        setConversations(prev => {
-          const updated = prev.map(c =>
-            c.id === targetConvId ? {
-              ...c,
-              messages: c.messages.map(m => m.id === aiMsg.id ? { ...m, content: fullContent } : m),
-              title: c.messages.length <= 2 ? (fullContent.slice(0, 30) || c.title) : c.title,
-            } : c
-          );
-          saveConversations(updated);
-          return updated;
-        });
-      },
-      () => {},
-      (err) => {
-        setConversations(prev => {
-          const updated = prev.map(c =>
-            c.id === targetConvId ? {
-              ...c,
-              messages: c.messages.map(m => m.id === aiMsg.id ? { ...m, content: `❌ ${err}` } : m),
-            } : c
-          );
-          saveConversations(updated);
-          return updated;
-        });
-      },
-    );
-  }, [input, streaming, activeConvId, conversations, sendMessage]);
-
-  /* Delete conversation */
-  const deleteConv = (id: string) => {
-    const updated = conversations.filter(c => c.id !== id);
-    setConversations(updated);
-    saveConversations(updated);
-    if (activeConvId === id) setActiveConvId(updated[0]?.id || null);
+  const handleSearch = (kw?: string) => {
+    const q = kw || keyword;
+    if (!q.trim()) return;
+    setSearching(true);
+    setTimeout(() => { setResults(MOCK_RESULTS); setHasSearched(true); setSelectedId(null); setSearching(false); }, 600);
   };
 
-  /* New chat */
-  const newChat = () => {
-    setActiveConvId(null);
-    setInput("");
-    setTimeout(() => inputRef.current?.focus(), 100);
-  };
+  useEffect(() => { if (initialQuery) handleSearch(initialQuery); /* eslint-disable-line */ }, []);
 
-  /* Key handler */
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  };
+  const selectedProduct = selectedId ? results.find((r) => r.id === selectedId) : null;
+  const analysisData = selectedProduct ? {
+    score: selectedProduct.aiScore,
+    profitLevel: parseInt(selectedProduct.profitRate) >= 40 ? "优秀" : "良好",
+    heatLevel: selectedProduct.heat >= 90 ? "高" : selectedProduct.heat >= 80 ? "中" : "低",
+    riskLevel: selectedProduct.competition,
+    channels: selectedProduct.category === "母婴用品" ? "宝妈短视频 / 亲子直播" : "短视频带货 / 直播间转化",
+    testBudget: selectedProduct.competition === "高" ? "¥500 - ¥1500" : "¥300 - ¥800",
+    conclusion: selectedProduct.aiSuggestion,
+  } : AI_ANALYSIS_DEFAULT;
 
-  if (!user && !loading) {
-    return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center space-y-5">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center mx-auto">
-            <Brain className="h-8 w-8 text-indigo-400" />
-          </div>
-          <p className="text-slate-400 text-lg">请先登录</p>
-          <Link href="/login"><Button className="rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600">去登录</Button></Link>
-        </motion.div>
-      </div>
-    );
-  }
+
+  const platforms = [
+    { key: "taobao", label: "淘宝" }, { key: "1688", label: "1688" },
+    { key: "jd", label: "京东" }, { key: "tmall", label: "天猫" },
+  ];
+  const methods = [
+    { key: "keyword", label: "关键词选品" }, { key: "nlp", label: "自然语言" },
+    { key: "market", label: "市场分析" }, { key: "category", label: "类目选品" },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#09090b] flex flex-col">
-      <Navbar user={user} showAuth={false} onLogout={async () => { await supabase.auth.signOut(); router.push("/login"); }} />
-
-      <div className="flex flex-1 pt-16 h-[calc(100vh-4rem)]">
-        {/* ── Sidebar ── */}
-        <AnimatePresence>
-          {sidebarOpen && (
-            <>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
-              <motion.aside
-                initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ duration: 0.2 }}
-                className="fixed lg:static inset-y-16 lg:inset-y-0 left-0 w-[280px] bg-[#0a0a0f] border-r border-white/[0.06] z-50 flex flex-col"
-              >
-                <div className="p-4">
-                  <button onClick={newChat} className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-sm text-slate-300 hover:bg-white/[0.04] hover:border-white/[0.12] transition-all font-medium">
-                    <Plus className="h-4 w-4" /> 新对话
-                  </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-3 space-y-1">
-                  {conversations.map(conv => (
-                    <div key={conv.id} className="group relative">
-                      <button
-                        onClick={() => { setActiveConvId(conv.id); setSidebarOpen(false); }}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
-                          activeConvId === conv.id ? "bg-white/[0.06] text-white" : "text-slate-400 hover:text-white hover:bg-white/[0.03]"
-                        }`}
-                      >
-                        <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{conv.title || "新对话"}</span>
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteConv(conv.id); }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                  {conversations.length === 0 && (
-                    <p className="text-xs text-slate-600 text-center py-8">暂无对话记录</p>
-                  )}
-                </div>
-              </motion.aside>
-            </>
-          )}
-        </AnimatePresence>
-
-        {/* Always visible on desktop */}
-        <aside className="hidden lg:flex w-[280px] bg-[#0a0a0f] border-r border-white/[0.06] flex-col shrink-0">
-          <div className="p-4">
-            <button onClick={newChat} className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-sm text-slate-300 hover:bg-white/[0.04] hover:border-white/[0.12] transition-all font-medium">
-              <Plus className="h-4 w-4" /> 新对话
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto px-3 space-y-1">
-            {conversations.map(conv => (
-              <div key={conv.id} className="group relative">
-                <button
-                  onClick={() => setActiveConvId(conv.id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
-                    activeConvId === conv.id ? "bg-white/[0.06] text-white" : "text-slate-400 hover:text-white hover:bg-white/[0.03]"
-                  }`}
-                >
-                  <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{conv.title || "新对话"}</span>
-                </button>
-                <button
-                  onClick={() => deleteConv(conv.id)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
+    <WorkspaceLayout>
+      <div className="space-y-5">
+        {/* Header Card */}
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          className="relative overflow-hidden bg-white rounded-2xl border border-gray-100 shadow-sm">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-50 via-white to-orange-50" />
+          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 md:p-6 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-sky-400 flex items-center justify-center shadow-sm shadow-blue-200">
+                <Sparkles className="h-5 w-5 text-white" />
               </div>
-            ))}
-            {conversations.length === 0 && (
-              <p className="text-xs text-slate-600 text-center py-8">暂无对话记录</p>
-            )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg font-bold text-[#1a1a2e]">智能选品中心</h1>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">选品雷达</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">AI智能选品</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/ai-assistant?tab=plan"><button className="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200 transition-all flex items-center gap-1.5"><Target className="h-3.5 w-3.5" /> 选品计划</button></Link>
+              <Link href="/ai-assistant?tab=library"><button className="px-3.5 py-2 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200 transition-all flex items-center gap-1.5"><FolderOpen className="h-3.5 w-3.5" /> 选品库</button></Link>
+              <Link href="/product-radar"><button className="px-3.5 py-2 rounded-lg text-xs font-medium text-blue-600 hover:bg-blue-50 border border-blue-200 transition-all flex items-center gap-1.5">全部商品 <ChevronRight className="h-3.5 w-3.5" /></button></Link>
+            </div>
           </div>
-        </aside>
+        </motion.div>
 
-        {/* ── Main Chat Area ── */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Mobile header */}
-          <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/[0.06]">
-            <button onClick={() => setSidebarOpen(true)} className="p-1.5 rounded-lg border border-white/[0.06] text-slate-400">
-              <MessageSquare className="h-4 w-4" />
-            </button>
-            <span className="text-sm font-semibold text-white truncate">{activeConv?.title || "AI 投流助手"}</span>
-          </div>
+        {/* Main Grid */}
+        <div className="grid lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-5">
+            {/* Filter Card */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div><h3 className="text-sm font-bold text-[#1a1a2e]">智能筛选作业台</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">当前：{platforms.find(p => p.key === platform)?.label} · {methods.find(m => m.key === method)?.label}</p></div>
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <span>候选：<strong className="text-[#1a1a2e]">{results.length}</strong></span>
+                  <span>S/A：<strong className="text-[#1a1a2e]">{results.filter(r => r.aiScore >= 85).length}</strong></span>
+                </div>
+              </div>
+              <div className="mb-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">电商平台</p>
+                <div className="flex flex-wrap gap-2">{platforms.map((p) => (
+                  <button key={p.key} onClick={() => setPlatform(p.key)} className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${platform === p.key ? "bg-gradient-to-r from-blue-500 to-sky-400 text-white shadow-sm shadow-blue-200" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>{p.label}</button>
+                ))}</div>
+              </div>
+              <div className="mb-4"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">选品方式</p>
+                <div className="flex flex-wrap gap-2">{methods.map((m) => (
+                  <button key={m.key} onClick={() => setMethod(m.key)} className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${method === m.key ? "bg-blue-50 text-blue-600 border border-blue-200" : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300"}`}>{m.label}</button>
+                ))}</div>
+              </div>
+              <form onSubmit={(e) => { e.preventDefault(); handleSearch(); }} className="flex gap-2">
+                <div className="relative flex-1"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)}
+                    placeholder={"输入商品关键词，如 夏季连衣裙、防晒衣、厨房置物架"}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-[#1a1a2e] placeholder-gray-400 focus:outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-50 focus:bg-white transition-all" /></div>
+                <button type="submit" disabled={searching || !keyword.trim()}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-sky-400 text-white text-sm font-medium hover:from-blue-600 hover:to-sky-500 transition-all shadow-sm shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0">
+                  {searching ? <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> 搜索中...</> : <><Search className="h-4 w-4" /> 开始搜索</>}
+                </button>
+              </form>
+            </motion.div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-6">
-            <div className="max-w-3xl mx-auto space-y-4">
-              {messages.length === 0 ? (
-                <EmptyState onPrompt={(text) => handleSend(text)} />
+            {/* Results or Empty */}
+            <AnimatePresence mode="wait">
+              {!hasSearched ? (
+                <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 md:p-14 text-center">
+                  <div className="inline-flex h-16 w-16 rounded-2xl bg-blue-50 items-center justify-center mb-5"><Search className="h-7 w-7 text-blue-400" /></div>
+                  <h3 className="text-base font-bold text-[#1a1a2e] mb-2">输入关键词，开始发现高潜力商品</h3>
+                  <p className="text-sm text-gray-500 mb-5 max-w-md mx-auto leading-relaxed">系统将根据价格、销量、利润、热度和竞争度，生成 AI 选品建议。</p>
+                  <button onClick={() => { setKeyword("夏季防晒衣"); handleSearch("夏季防晒衣"); }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium hover:bg-blue-100 transition-colors border border-blue-200">
+                    <Sparkles className="h-4 w-4" /> 试试：夏季防晒衣</button>
+                </motion.div>
               ) : (
-                messages.map((msg, i) => (
-                  <MessageBubble key={msg.id} msg={msg} isLast={i === messages.length - 1} streaming={streaming && i === messages.length - 1 && msg.role === "assistant"} />
-                ))
+                <motion.div key="results" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2"><div className="h-6 w-6 rounded-md bg-blue-50 flex items-center justify-center"><Sparkles className="h-3 w-3 text-blue-500" /></div><h3 className="text-sm font-bold text-[#1a1a2e]">AI推荐商品</h3><span className="text-xs text-gray-400">({results.length} 个结果)</span></div>
+                    <div className="flex items-center gap-1.5"><button className="px-2.5 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all flex items-center gap-1"><Filter className="h-3 w-3" /> 筛选</button><button className="px-2.5 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all flex items-center gap-1"><Download className="h-3 w-3" /> 导出</button></div>
+                  </div>
+                  <div className="hidden md:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto"><table className="w-full">
+                      <thead><tr className="bg-gray-50/50 border-b border-gray-100">{["商品名称","平台","类目","售价","近7日销量","预估利润","利润率","热度","竞争","AI评分","AI建议"].map((h)=>(<th key={h} className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>))}</tr></thead>
+                      <tbody>{results.map((item)=>(
+                        <tr key={item.id} onClick={() => setSelectedId(selectedId === item.id ? null : item.id)} className={`border-b border-gray-50 cursor-pointer transition-colors ${selectedId === item.id ? "bg-blue-50/50" : "hover:bg-gray-50/50"}`}>
+                          <td className="px-4 py-3.5"><div className="flex items-center gap-2.5"><div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center shrink-0"><ShoppingBag className="h-3.5 w-3.5 text-gray-400" /></div><span className="text-sm font-medium text-[#1a1a2e]">{item.name}</span></div></td>
+                          <td className="px-4 py-3.5"><span className={`text-xs px-2 py-1 rounded-md font-medium ${item.platform==="1688"?"bg-orange-50 text-orange-600 border border-orange-200":item.platform==="淘宝"?"bg-blue-50 text-blue-600 border border-blue-200":"bg-gray-50 text-gray-600 border border-gray-200"}`}>{item.platform}</span></td>
+                          <td className="px-4 py-3.5"><span className="text-xs text-gray-500">{item.category}</span></td>
+                          <td className="px-4 py-3.5"><span className="text-sm font-bold text-orange-500">{item.price}</span></td>
+                          <td className="px-4 py-3.5"><span className="text-sm font-medium text-[#1a1a2e]">{item.sales}</span></td>
+                          <td className="px-4 py-3.5"><span className="text-sm font-bold text-emerald-600">{item.profit}</span></td>
+                          <td className="px-4 py-3.5"><span className="text-sm font-medium text-emerald-600">{item.profitRate}</span></td>
+                          <td className="px-4 py-3.5"><div className="flex items-center gap-2"><div className="flex-1 max-w-[60px] h-1.5 rounded-full bg-gray-100"><div className={`h-1.5 rounded-full ${getHeatColor(item.heat)}`} style={{width:`${item.heat}%`}}/></div><span className={`text-xs font-bold ${item.heat>=90?"text-orange-500":item.heat>=80?"text-amber-500":"text-gray-500"}`}>{item.heat}</span></div></td>
+                          <td className="px-4 py-3.5"><span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getCompetitionBadge(item.competition)}`}>{item.competition}</span></td>
+                          <td className="px-4 py-3.5"><div className="flex items-center gap-2"><div className="flex-1 max-w-[50px] h-1.5 rounded-full bg-gray-100"><div className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-sky-400" style={{width:`${item.aiScore}%`}}/></div><span className="text-xs font-bold text-blue-600">{item.aiScore}</span></div></td>
+                          <td className="px-4 py-3.5"><span className="text-[11px] text-gray-500 line-clamp-2 max-w-[160px]">{item.aiSuggestion}</span></td>
+                        </tr>
+                      ))}</tbody></table></div></div>
+                  <div className="md:hidden space-y-3">{results.map((item)=>(
+                    <div key={item.id} onClick={() => setSelectedId(selectedId === item.id ? null : item.id)} className={`bg-white rounded-xl border shadow-sm p-4 cursor-pointer transition-colors ${selectedId === item.id?"border-blue-300 bg-blue-50/30":"border-gray-100"}`}>
+                      <div className="flex items-start justify-between mb-2"><div className="flex items-center gap-2"><div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center"><ShoppingBag className="h-3.5 w-3.5 text-gray-400"/></div><div><p className="text-sm font-medium text-[#1a1a2e]">{item.name}</p><div className="flex items-center gap-1.5 mt-0.5"><span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${item.platform==="1688"?"bg-orange-50 text-orange-600":"bg-blue-50 text-blue-600"}`}>{item.platform}</span><span className="text-[10px] text-gray-400">{item.category}</span></div></div></div><span className="text-sm font-bold text-orange-500">{item.price}</span></div>
+                      <div className="grid grid-cols-3 gap-2 text-xs"><div><span className="text-gray-400">销量</span><p className="font-medium text-[#1a1a2e]">{item.sales}</p></div><div><span className="text-gray-400">利润</span><p className="font-bold text-emerald-600">{item.profit}</p></div><div><span className="text-gray-400">AI评分</span><p className="font-bold text-blue-600">{item.aiScore}</p></div></div>
+                      <p className="text-[11px] text-gray-500 mt-2 line-clamp-2">{item.aiSuggestion}</p>
+                    </div>
+                  ))}</div>
+                </motion.div>
               )}
-              <div ref={messagesEndRef} />
-            </div>
+            </AnimatePresence>
           </div>
 
-          {/* Input area */}
-          <div className="border-t border-white/[0.06] bg-[#09090b]/80 backdrop-blur-xl p-4">
-            <div className="max-w-3xl mx-auto">
-              <div className="relative flex items-end gap-2 bg-white/[0.03] border border-white/[0.08] rounded-2xl px-4 py-3 focus-within:border-indigo-500/30 focus-within:bg-white/[0.04] transition-all">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="输入你的问题..."
-                  rows={1}
-                  className="flex-1 bg-transparent text-white placeholder:text-slate-600 text-sm resize-none outline-none max-h-32 py-0.5"
-                  style={{ scrollbarWidth: "none" }}
-                />
-                {streaming ? (
-                  <button onClick={abort} className="p-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all shrink-0">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleSend()}
-                    disabled={!input.trim()}
-                    className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0 shadow-lg shadow-indigo-500/20"
-                  >
-                    <Send className="h-4 w-4" />
-                  </button>
-                )}
+          {/* Right Panel: AI Analysis */}
+          <div className="space-y-5">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:p-6">
+              <div className="flex items-center gap-2.5 mb-5"><div className="h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center"><Sparkles className="h-4 w-4 text-blue-500"/></div><h3 className="text-sm font-bold text-[#1a1a2e]">AI选品分析</h3></div>
+              <div className="space-y-4">
+                <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-4 border border-blue-100"><p className="text-[11px] text-gray-400 mb-1">综合推荐评分</p><p className="text-3xl font-bold text-blue-600">{analysisData.score}</p><div className="mt-2 h-2 rounded-full bg-gray-200"><div className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-sky-400" style={{width:`${analysisData.score}%`}}/></div></div>
+                {[
+                  {label:"利润空间",value:analysisData.profitLevel,color:"text-emerald-600 bg-emerald-50"},
+                  {label:"市场热度",value:analysisData.heatLevel,color:"text-orange-600 bg-orange-50"},
+                  {label:"竞争风险",value:analysisData.riskLevel,color:analysisData.riskLevel==="低"?"text-emerald-600 bg-emerald-50":analysisData.riskLevel==="中"?"text-amber-600 bg-amber-50":"text-red-600 bg-red-50"},
+                  {label:"测试预算",value:analysisData.testBudget,color:"text-gray-700 bg-gray-50"}
+                ].map((d)=>(<div key={d.label} className="text-center p-3 rounded-xl border border-gray-100"><p className="text-[11px] text-gray-400 mb-1">{d.label}</p><p className={`text-xs font-bold rounded-full px-2 py-0.5 inline-block ${d.color}`}>{d.value}</p></div>))}
+                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100"><p className="text-[11px] text-gray-400 mb-1">适合渠道</p><p className="text-xs font-medium text-[#1a1a2e]">{analysisData.channels}</p></div>
+                <div className="p-4 rounded-xl bg-blue-50 border border-blue-100"><p className="text-[11px] font-semibold text-blue-600 mb-2">分析结论</p><p className="text-xs text-gray-600 leading-relaxed">{analysisData.conclusion}</p></div>
               </div>
-              <p className="text-[10px] text-slate-600 text-center mt-2">
-                AI 投流助手 · 基于 GPT 驱动 · 仅供参考
-              </p>
-            </div>
+            </motion.div>
+            <div className="space-y-3">
+              {[{icon:ClipboardList,title:"选品计划",desc:"保存高潜力商品，形成选品任务列表。",href:"/ai-assistant?tab=plan"},{icon:FolderOpen,title:"选品库",desc:"沉淀已筛选商品，方便后续对比和复盘。",href:"/ai-assistant?tab=library"},{icon:Search,title:"AI找货源",desc:"根据商品关键词寻找可供货平台和价格区间。",href:"/ai-assistant?tab=source"}].map((card)=>(
+                <Link key={card.title} href={card.href} className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:border-blue-200 hover:shadow-md transition-all group">
+                  <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors"><card.icon className="h-4.5 w-4.5 text-blue-500"/></div>
+                  <div><h4 className="text-sm font-bold text-[#1a1a2e] mb-0.5">{card.title}</h4><p className="text-xs text-gray-500 leading-relaxed">{card.desc}</p></div>
+                  <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-blue-500 shrink-0 mt-2 transition-colors"/>
+                </Link>
+              ))}</div>
           </div>
         </div>
       </div>
-    </div>
+    </WorkspaceLayout>
+  );
+}
+
+export default function AIAssistantPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-[#f5f8fb]"><div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"/></div>}>
+      <AIAssistantPageContent />
+    </Suspense>
   );
 }
